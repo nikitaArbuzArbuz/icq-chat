@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { ChatSocket } from '../chatSocket';
 import ContactList from './ContactList';
@@ -183,6 +183,15 @@ export default function Chat({ auth, onLogout }) {
           ? { ...prev, [event.userId]: { ...prev[event.userId], online: event.online } }
           : prev));
         break;
+      case 'presenceSnapshot': {
+        // Ответ на подписку: состояние на момент подписки для всех, на кого подписались.
+        const watched = new Set(event.watched);
+        const online = new Set(event.online);
+        const apply = (c) => (watched.has(c.id) ? { ...c, online: online.has(c.id) } : c);
+        setContacts((prev) => prev.map(apply));
+        setKnownUsers((prev) => Object.fromEntries(Object.entries(prev).map(([id, c]) => [id, apply(c)])));
+        break;
+      }
       case 'error': {
         const pending = event.clientId ? pendingRef.current.get(event.clientId) : null;
         if (pending) {
@@ -305,6 +314,22 @@ export default function Chat({ auth, onLogout }) {
   };
 
   const activePeer = contacts.find((c) => c.id === activePeerId) ?? knownUsers[activePeerId] ?? null;
+
+  // Подписка на онлайн-статусы: сервер присылает presence только по тем, на кого подписались,
+  // то есть по пользователям из списка контактов и собеседнику открытого диалога.
+  // Ключ не зависит от порядка, поэтому пересортировка списка не вызывает повторную подписку.
+  const watchKey = useMemo(() => {
+    const ids = new Set(contacts.filter((c) => !c.self).map((c) => c.id));
+    if (activePeerId != null && activePeerId !== me) ids.add(activePeerId);
+    return [...ids].sort((a, b) => a - b).join(',');
+  }, [contacts, activePeerId, me]);
+
+  // Подписываемся заново при каждом подключении: подписки живут, пока живёт соединение.
+  useEffect(() => {
+    if (!connected) return;
+    const userIds = watchKey ? watchKey.split(',').map(Number) : [];
+    socketRef.current?.send({ type: 'watch', userIds });
+  }, [watchKey, connected]);
 
   return (
     <div className="app">

@@ -48,6 +48,14 @@ public final class WsEvents {
         }
     }
 
+    /** Ответ на подписку watch: на кого подписаны и кто из них сейчас онлайн. */
+    public record PresenceSnapshotEvent(String type, List<Long> watched, List<Long> online) {
+        public PresenceSnapshotEvent(List<Long> watched, List<Long> online) {
+            this("presenceSnapshot", watched, online);
+        }
+    }
+
+    /** Пользователь появился в сети или вышел. Приходит только тем, кто на него подписан. */
     public record PresenceEvent(String type, long userId, boolean online) {
         public PresenceEvent(long userId, boolean online) {
             this("presence", userId, online);

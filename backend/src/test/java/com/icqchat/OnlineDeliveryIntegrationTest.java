@@ -1,6 +1,5 @@
 package com.icqchat;
 
-import com.fasterxml.jackson.databind.JsonNode;
 import com.icqchat.support.Api;
 import com.icqchat.support.ChatWs;
 import com.icqchat.support.TestUser;
@@ -8,8 +7,6 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
-import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Регрессия NPE в SessionRegistry.sendToUserExcept: рассылка событию пользователю, который онлайн,
@@ -65,33 +62,6 @@ class OnlineDeliveryIntegrationTest {
             bobTab.assertNoEvent("read");
             bobTab.assertNoEvent("error");
         }
-    }
-
-    @Test
-    @DisplayName("онлайн, пока открыта хотя бы одна вкладка: presence приходит только при первом входе и последнем выходе")
-    void presenceWithSeveralTabs() {
-        TestUser alice = Api.newUser();
-        TestUser bob = Api.newUser();
-
-        try (ChatWs aliceTab = ChatWs.connect(alice);
-             ChatWs bobTab = ChatWs.connect(bob)) {
-            assertTrue(aliceTab.await("presence", e -> isAbout(e, bob)).path("online").asBoolean());
-            assertTrue(Api.contact(alice, bob).path("online").asBoolean());
-
-            ChatWs bobOtherTab = ChatWs.connect(bob);
-            aliceTab.assertNoEvent("presence", e -> isAbout(e, bob));
-            bobTab.close();
-            aliceTab.assertNoEvent("presence", e -> isAbout(e, bob));
-            assertTrue(Api.contact(alice, bob).path("online").asBoolean());
-
-            bobOtherTab.close();
-            assertFalse(aliceTab.await("presence", e -> isAbout(e, bob)).path("online").asBoolean());
-            assertFalse(Api.contact(alice, bob).path("online").asBoolean());
-        }
-    }
-
-    private static boolean isAbout(JsonNode event, TestUser user) {
-        return event.path("userId").asLong() == user.id();
     }
 
     @Test

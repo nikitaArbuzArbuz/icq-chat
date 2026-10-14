@@ -17,11 +17,13 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 
 /**
- * Обработчик WebSocket. Сообщения от клиента: send, delivered, read, pong. Протокол описан в README.
+ * Обработчик WebSocket. Сообщения от клиента: send, delivered, read, watch, pong. Протокол описан в README.
  */
 public class ChatWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
@@ -30,6 +32,8 @@ public class ChatWebSocketHandler {
     private static final int CLOSE_UNAUTHORIZED = 4401;
     /** Клиент перестал отвечать на ping. Если он всё-таки жив, то просто переподключится. */
     private static final int CLOSE_HEARTBEAT_TIMEOUT = 4408;
+    /** На скольких пользователей можно подписаться: в списке контактов до 100 человек и открытый диалог, запас вдвое. */
+    private static final int MAX_WATCHED_USERS = 200;
 
     private final JwtService jwtService;
     private final MessageService messageService;
@@ -60,13 +64,11 @@ public class ChatWebSocketHandler {
         long id = token.get().userId();
         ctx.attribute(USER_ID_ATTRIBUTE, id);
 
-        boolean cameOnline = registry.add(id, ctx);
+        // Если это первая вкладка пользователя, подписчики на его статус получат presence online.
+        registry.add(id, ctx);
         // Монитор закроет сессию, если клиент перестанет отвечать на ping или истечёт токен.
         heartbeat.track(ctx, id, token.get().expiresAt());
         log.info("User {} connected, session {}", id, ctx.sessionId());
-        if (cameOnline) {
-            registry.sendToAllExcept(id, Json.write(new WsEvents.PresenceEvent(id, true)));
-        }
 
         // Досылаем всё, что пришло, пока пользователь был офлайн. Клиент подтвердит доставку.
         for (Message message : messageService.undelivered(id)) {
@@ -90,6 +92,7 @@ public class ChatWebSocketHandler {
                 case "send" -> handleSend(ctx, userId, node);
                 case "delivered" -> handleDelivered(userId, node);
                 case "read" -> handleRead(ctx, userId, node);
+                case "watch" -> handleWatch(ctx, userId, node);
                 case "pong" -> {
                     // Ответ на ping: сессию уже продлил heartbeat.touch выше.
                 }
@@ -126,6 +129,30 @@ public class ChatWebSocketHandler {
         if (recipientId != senderId) {
             registry.sendToUser(recipientId, event);
         }
+    }
+
+    /**
+     * Подписка на онлайн-статусы. Клиент присылает всех, кого показывает в списке контактов,
+     * новый набор заменяет предыдущий. В ответ приходит снимок: кто из них сейчас онлайн.
+     */
+    private void handleWatch(WsMessageContext ctx, long userId, JsonNode node) {
+        JsonNode userIds = node.path("userIds");
+        if (!userIds.isArray()) {
+            throw ApiException.badRequest("VALIDATION_ERROR", "Нужен массив userIds");
+        }
+        if (userIds.size() > MAX_WATCHED_USERS) {
+            throw ApiException.badRequest("VALIDATION_ERROR",
+                    "Можно подписаться не больше чем на " + MAX_WATCHED_USERS + " пользователей");
+        }
+        Set<Long> ids = new LinkedHashSet<>();
+        userIds.forEach(idNode -> {
+            if (idNode.canConvertToLong() && idNode.asLong() != userId) {
+                ids.add(idNode.asLong());
+            }
+        });
+        List<Long> online = registry.watch(userId, ctx, ids);
+        List<Long> watched = ids.stream().sorted().toList();
+        registry.send(ctx, Json.write(new WsEvents.PresenceSnapshotEvent(watched, online)));
     }
 
     private void handleDelivered(long recipientId, JsonNode node) {
@@ -191,11 +218,9 @@ public class ChatWebSocketHandler {
     /** Повторный вызов для той же сессии безопасен: второй раз она уже не найдётся в реестре. */
     private void unregister(WsContext ctx, long userId) {
         heartbeat.untrack(ctx);
-        boolean wentOffline = registry.remove(userId, ctx);
+        // Если это была последняя вкладка пользователя, подписчики на его статус получат presence offline.
+        registry.remove(userId, ctx);
         log.info("User {} disconnected, session {}", userId, ctx.sessionId());
-        if (wentOffline) {
-            registry.sendToAllExcept(userId, Json.write(new WsEvents.PresenceEvent(userId, false)));
-        }
     }
 
     private void sendError(WsContext ctx, String clientId, String code, String message) {

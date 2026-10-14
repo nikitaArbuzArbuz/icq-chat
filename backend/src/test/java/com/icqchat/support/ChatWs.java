@@ -102,6 +102,12 @@ public final class ChatWs implements AutoCloseable {
         send(Map.of("type", "read", "peerId", peerId, "lastMessageId", lastMessageId));
     }
 
+    /** Подписка на онлайн-статусы пользователей. Возвращает снимок, который сервер присылает в ответ. */
+    public JsonNode watch(long... userIds) {
+        send(Map.of("type", "watch", "userIds", Arrays.stream(userIds).boxed().toList()));
+        return await("presenceSnapshot");
+    }
+
     // ---------- ожидание событий
 
     public JsonNode awaitAck(String clientId) {
