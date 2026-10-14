@@ -15,6 +15,10 @@ public class MessageService {
     private static final int DEFAULT_LIMIT = 50;
     private static final int MAX_LIMIT = 100;
     private static final int MAX_CLIENT_ID_LENGTH = 64;
+    /** Сколько недоставленных сообщений уходит клиенту за раз. Следующая пачка уходит после подтверждения доставки этой. */
+    public static final int UNDELIVERED_BATCH_SIZE = 100;
+    /** Сколько сообщений можно подтвердить одним delivered: ограничивает размер одного UPDATE. */
+    public static final int MAX_DELIVERED_IDS = 1000;
 
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
@@ -72,6 +76,10 @@ public class MessageService {
         if (messageIds == null || messageIds.isEmpty()) {
             return Map.of();
         }
+        if (messageIds.size() > MAX_DELIVERED_IDS) {
+            throw ApiException.badRequest("VALIDATION_ERROR",
+                    "За раз можно подтвердить не больше " + MAX_DELIVERED_IDS + " сообщений");
+        }
         return messageRepository.markDelivered(recipientId, messageIds);
     }
 
@@ -79,8 +87,17 @@ public class MessageService {
         return messageRepository.markRead(recipientId, senderId, upToMessageId);
     }
 
-    public List<Message> undelivered(long recipientId) {
-        return messageRepository.findUndelivered(recipientId);
+    /** Следующая пачка недоставленных сообщений после afterId. Читаем на одну строку больше, чтобы знать, есть ли ещё. */
+    public UndeliveredBatch undelivered(long recipientId, long afterId) {
+        List<Message> rows = messageRepository.findUndelivered(recipientId, afterId, UNDELIVERED_BATCH_SIZE + 1);
+        boolean hasMore = rows.size() > UNDELIVERED_BATCH_SIZE;
+        return new UndeliveredBatch(hasMore ? rows.subList(0, UNDELIVERED_BATCH_SIZE) : rows, hasMore);
+    }
+
+    public record UndeliveredBatch(List<Message> messages, boolean hasMore) {
+        public long lastId() {
+            return messages.get(messages.size() - 1).id();
+        }
     }
 
     public record SendResult(Message message, boolean created) {

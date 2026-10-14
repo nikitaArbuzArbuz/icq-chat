@@ -54,6 +54,10 @@ function touchContact(contacts, peerId, createdAt) {
 }
 
 const EMPTY_CHAT = { messages: [], hasMore: false, loaded: false, loading: false };
+// Подтверждения доставки копятся и уходят одним сообщением: на сервере это один UPDATE на всех.
+const DELIVERED_FLUSH_DELAY = 100;
+// Столько id сервер принимает в одном delivered (MessageService.MAX_DELIVERED_IDS).
+const MAX_DELIVERED_IDS = 1000;
 
 export default function Chat({ auth, onLogout }) {
   const me = auth.user.id;
@@ -73,6 +77,10 @@ export default function Chat({ auth, onLogout }) {
   const activePeerRef = useRef(activePeerId);
   const searchRef = useRef(search);
   const contactsRef = useRef(contacts);
+  const contactsRequestRef = useRef(0);
+  const contactsReloadRef = useRef(null);
+  const deliveredQueueRef = useRef([]);
+  const deliveredTimerRef = useRef(null);
 
   chatsRef.current = chats;
   contactsRef.current = contacts;
@@ -84,8 +92,12 @@ export default function Chat({ auth, onLogout }) {
   }, []);
 
   const loadContacts = useCallback(async (query) => {
+    // Ответы могут прийти не в том порядке, в каком ушли запросы: набрали «a», потом «ab», а ответ на «a»
+    // пришёл позже. Применяем только ответ на последний запрос, иначе устаревший список перетрёт свежий.
+    const requestId = ++contactsRequestRef.current;
     try {
       const list = await api.contacts(auth.token, query);
+      if (requestId !== contactsRequestRef.current) return;
       setContacts(list);
       setKnownUsers((prev) => ({ ...prev, ...Object.fromEntries(list.map((c) => [c.id, c])) }));
     } catch (e) {
@@ -100,13 +112,49 @@ export default function Chat({ auth, onLogout }) {
 
   // Новое сообщение в диалоге: поднимаем его вверх. Если собеседника нет в списке и поиск не активен,
   // перезагружаем список, чтобы диалог появился. При активном поиске он появится, когда поиск очистят.
+  // Перезагрузка откладывается до конца текущего события: пачка из сотни сообщений от незнакомых
+  // собеседников даёт один запрос, а не сотню.
   const bumpContact = useCallback((peerId, createdAt) => {
     if (contactsRef.current.some((c) => c.id === peerId)) {
       setContacts((prev) => touchContact(prev, peerId, createdAt));
-    } else if (!searchRef.current.trim()) {
-      loadContacts('');
+    } else if (!searchRef.current.trim() && contactsReloadRef.current == null) {
+      contactsReloadRef.current = setTimeout(() => {
+        contactsReloadRef.current = null;
+        loadContacts('');
+      }, 0);
     }
   }, [loadContacts]);
+
+  const flushDelivered = useCallback(() => {
+    clearTimeout(deliveredTimerRef.current);
+    deliveredTimerRef.current = null;
+    const ids = deliveredQueueRef.current;
+    deliveredQueueRef.current = [];
+    // Если соединения сейчас нет, подтверждения теряются, и это не страшно: недоставленное сервер
+    // пришлёт снова при переподключении, и оно будет подтверждено тогда.
+    for (let i = 0; i < ids.length; i += MAX_DELIVERED_IDS) {
+      socketRef.current?.send({ type: 'delivered', messageIds: ids.slice(i, i + MAX_DELIVERED_IDS) });
+    }
+  }, []);
+
+  // immediately: пачку недоставленного подтверждаем сразу, потому что сервер ждёт подтверждения,
+  // чтобы прислать следующую. Подтверждения обычных входящих копятся DELIVERED_FLUSH_DELAY мс.
+  const confirmDelivered = useCallback((ids, immediately) => {
+    deliveredQueueRef.current.push(...ids);
+    if (immediately) {
+      flushDelivered();
+    } else if (deliveredTimerRef.current == null) {
+      deliveredTimerRef.current = setTimeout(flushDelivered, DELIVERED_FLUSH_DELAY);
+    }
+  }, [flushDelivered]);
+
+  // Входящее сообщение или своё из другой вкладки: в переписку и вверх списка контактов.
+  const addMessage = useCallback((message) => {
+    const peerId = message.senderId === me ? message.recipientId : message.senderId;
+    updateChat(peerId, (chat) => ({ ...chat, messages: mergeMessage(chat.messages, { ...message, pending: false }) }));
+    bumpContact(peerId, message.createdAt);
+    return peerId;
+  }, [me, updateChat, bumpContact]);
 
   const sendReadUpTo = useCallback((peerId, lastMessageId) => {
     if (peerId === me || lastMessageId == null) return;
@@ -145,16 +193,29 @@ export default function Chat({ auth, onLogout }) {
       }
       case 'message': {
         const message = event.message;
-        const peerId = message.senderId === me ? message.recipientId : message.senderId;
-        updateChat(peerId, (chat) => ({ ...chat, messages: mergeMessage(chat.messages, { ...message, pending: false }) }));
-        bumpContact(peerId, message.createdAt);
+        const peerId = addMessage(message);
         if (message.senderId !== me) {
-          socketRef.current?.send({ type: 'delivered', messageIds: [message.id] });
+          confirmDelivered([message.id], false);
           if (activePeerRef.current === peerId && document.visibilityState === 'visible') {
             sendReadUpTo(peerId, message.id);
           } else {
             setContacts((prev) => prev.map((c) => (c.id === peerId ? { ...c, unread: c.unread + 1 } : c)));
           }
+        }
+        break;
+      }
+      case 'undelivered': {
+        // Сообщения, пришедшие, пока мы были офлайн. Непрочитанные по ним сервер уже посчитал в списке
+        // контактов, поэтому счётчики здесь не трогаем. Доставку подтверждаем всей пачкой сразу:
+        // по этому подтверждению сервер пришлёт следующую.
+        const lastIdByPeer = new Map();
+        for (const message of event.messages) {
+          lastIdByPeer.set(addMessage(message), message.id);
+        }
+        confirmDelivered(event.messages.map((m) => m.id), true);
+        const active = activePeerRef.current;
+        if (lastIdByPeer.has(active) && document.visibilityState === 'visible') {
+          sendReadUpTo(active, lastIdByPeer.get(active));
         }
         break;
       }
@@ -209,7 +270,7 @@ export default function Chat({ auth, onLogout }) {
       default:
         break;
     }
-  }, [me, updateChat, sendReadUpTo, bumpContact]);
+  }, [me, updateChat, sendReadUpTo, bumpContact, addMessage, confirmDelivered]);
 
   const handleEventRef = useRef(handleEvent);
   handleEventRef.current = handleEvent;
@@ -236,7 +297,11 @@ export default function Chat({ auth, onLogout }) {
     });
     socketRef.current = socket;
     socket.connect();
-    return () => socket.close();
+    return () => {
+      socket.close();
+      clearTimeout(deliveredTimerRef.current);
+      clearTimeout(contactsReloadRef.current);
+    };
   }, [auth.token, onLogout]);
 
   useEffect(() => {

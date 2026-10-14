@@ -1,6 +1,7 @@
 package com.icqchat;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.icqchat.message.MessageService;
 import com.icqchat.support.Api;
 import com.icqchat.support.ChatWs;
 import com.icqchat.support.TestUser;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.LongStream;
 
 import static com.icqchat.support.Api.statusOf;
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -112,6 +114,16 @@ class MessageStatusIntegrationTest {
             aliceTab.assertNoEvent("delivered");
             aliceTab.assertNoEvent("read");
             assertEquals("SENT", statusOf(alice, bob.id(), id));
+        }
+    }
+
+    @Test
+    @DisplayName("подтвердить больше 1000 сообщений одним delivered нельзя: ошибка VALIDATION_ERROR")
+    void tooManyIdsInDelivered() {
+        TestUser bob = Api.newUser();
+        try (ChatWs bobTab = ChatWs.connect(bob)) {
+            bobTab.delivered(LongStream.rangeClosed(1, MessageService.MAX_DELIVERED_IDS + 1).toArray());
+            assertEquals("VALIDATION_ERROR", bobTab.await("error").path("code").asText());
         }
     }
 

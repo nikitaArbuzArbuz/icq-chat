@@ -29,6 +29,11 @@ import java.util.Set;
 public class ChatWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
     private static final String USER_ID_ATTRIBUTE = "userId";
+    /**
+     * Курсор досылки недоставленного: id последнего отправленного сообщения, пока клиент получил не всё.
+     * Хранится в атрибутах соединения, а не в общей карте: исчезает вместе с соединением, поэтому не может утечь.
+     */
+    private static final String UNDELIVERED_CURSOR_ATTRIBUTE = "undeliveredCursor";
     /** Токен невалидный или истёк. Клиент по этому коду разлогинивается. */
     private static final int CLOSE_UNAUTHORIZED = 4401;
     /** Клиент перестал отвечать на ping. Если он всё-таки жив, то просто переподключится. */
@@ -73,11 +78,10 @@ public class ChatWebSocketHandler {
         heartbeat.track(ctx, id, token.get().expiresAt());
         log.info("User {} connected, session {}", id, ctx.sessionId());
 
-        // Досылаем всё, что пришло, пока пользователь был офлайн. Клиент подтвердит доставку.
+        // Досылаем то, что пришло, пока пользователь был офлайн. Пачками: следующая уходит, только когда клиент
+        // подтвердит доставку предыдущей, поэтому клиент, который неделю был офлайн, не получает тысячи сообщений разом.
         try {
-            for (Message message : messageService.undelivered(id)) {
-                registry.send(ctx, Json.write(new WsEvents.MessageEvent(message)));
-            }
+            sendUndeliveredBatch(ctx, id, 0);
         } catch (Exception e) {
             // Без досылки клиент не узнает о сообщениях, пришедших офлайн, поэтому соединение закрываем:
             // клиент переподключится с паузой и попробует снова.
@@ -100,7 +104,7 @@ public class ChatWebSocketHandler {
             clientId = node.hasNonNull("clientId") ? node.get("clientId").asText() : null;
             switch (type) {
                 case "send" -> handleSend(ctx, userId, node);
-                case "delivered" -> handleDelivered(userId, node);
+                case "delivered" -> handleDelivered(ctx, userId, node);
                 case "read" -> handleRead(ctx, userId, node);
                 case "watch" -> handleWatch(ctx, userId, node);
                 case "pong" -> {
@@ -170,7 +174,7 @@ public class ChatWebSocketHandler {
         registry.send(ctx, Json.write(new WsEvents.PresenceSnapshotEvent(watched, online)));
     }
 
-    private void handleDelivered(long recipientId, JsonNode node) {
+    private void handleDelivered(WsMessageContext ctx, long recipientId, JsonNode node) {
         List<Long> ids = new ArrayList<>();
         node.path("messageIds").forEach(idNode -> {
             if (idNode.canConvertToLong()) {
@@ -179,6 +183,25 @@ public class ChatWebSocketHandler {
         });
         messageService.markDelivered(recipientId, ids).forEach((senderId, deliveredIds) ->
                 registry.sendToUser(senderId, Json.write(new WsEvents.DeliveredEvent(recipientId, deliveredIds))));
+
+        // Клиент подтвердил очередную пачку недоставленного: отправляем следующую.
+        Long cursor = ctx.attribute(UNDELIVERED_CURSOR_ATTRIBUTE);
+        if (cursor != null) {
+            sendUndeliveredBatch(ctx, recipientId, cursor);
+        }
+    }
+
+    /**
+     * Отправляет пачку недоставленного после afterId и запоминает, докуда дошли, если есть ещё.
+     * События одного соединения Jetty обрабатывает по очереди, поэтому курсор не нужно защищать от гонок.
+     */
+    private void sendUndeliveredBatch(WsContext ctx, long userId, long afterId) {
+        MessageService.UndeliveredBatch batch = messageService.undelivered(userId, afterId);
+        // Курсор ставим до отправки: подтверждение пачки может прийти раньше, чем мы выйдем из метода.
+        ctx.attribute(UNDELIVERED_CURSOR_ATTRIBUTE, batch.hasMore() ? batch.lastId() : null);
+        if (!batch.messages().isEmpty()) {
+            registry.send(ctx, Json.write(new WsEvents.UndeliveredEvent(batch.messages(), batch.hasMore())));
+        }
     }
 
     private void handleRead(WsMessageContext ctx, long readerId, JsonNode node) {

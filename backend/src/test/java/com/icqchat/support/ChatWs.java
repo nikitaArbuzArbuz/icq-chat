@@ -102,6 +102,13 @@ public final class ChatWs implements AutoCloseable {
         send(Map.of("type", "read", "peerId", peerId, "lastMessageId", lastMessageId));
     }
 
+    /** id сообщений из события undelivered в том порядке, в каком они пришли. */
+    public static List<Long> messageIds(JsonNode undeliveredEvent) {
+        List<Long> ids = new ArrayList<>();
+        undeliveredEvent.path("messages").forEach(message -> ids.add(message.path("id").asLong()));
+        return ids;
+    }
+
     /** Подписка на онлайн-статусы пользователей. Возвращает снимок, который сервер присылает в ответ. */
     public JsonNode watch(long... userIds) {
         send(Map.of("type", "watch", "userIds", Arrays.stream(userIds).boxed().toList()));

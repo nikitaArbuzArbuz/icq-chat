@@ -93,7 +93,10 @@ export class ChatSocket {
 
   scheduleReconnect() {
     clearTimeout(this.reconnectTimer);
-    this.reconnectTimer = setTimeout(() => this.connect(), this.reconnectDelay);
+    // Случайная задержка от половины до полной: после рестарта сервера тысячи клиентов
+    // не должны переподключаться в одну и ту же секунду.
+    const delay = this.reconnectDelay / 2 + Math.random() * (this.reconnectDelay / 2);
+    this.reconnectTimer = setTimeout(() => this.connect(), delay);
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
   }
 

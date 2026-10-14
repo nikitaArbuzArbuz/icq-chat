@@ -66,7 +66,7 @@ class FavoritesIntegrationTest {
             tab.sendMessage(alice, "заметка");
         }
         try (ChatWs reconnected = ChatWs.connect(alice)) {
-            reconnected.assertNoEvent("message");
+            reconnected.assertNoEvent("undelivered");
         }
     }
 }

@@ -162,11 +162,18 @@ public class MessageRepository {
         }
     }
 
-    public List<Message> findUndelivered(long recipientId) {
-        String sql = "SELECT " + COLUMNS + " FROM messages WHERE recipient_id = ? AND status = 'SENT' ORDER BY id";
+    /**
+     * Недоставленные сообщения получателю с id больше afterId, по возрастанию id, не больше limit штук.
+     * Запрос идёт по частичному индексу ix_messages_undelivered (recipient_id, id) WHERE status = 'SENT'.
+     */
+    public List<Message> findUndelivered(long recipientId, long afterId, int limit) {
+        String sql = "SELECT " + COLUMNS + " FROM messages "
+                + "WHERE recipient_id = ? AND status = 'SENT' AND id > ? ORDER BY id LIMIT ?";
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, recipientId);
+            ps.setLong(2, afterId);
+            ps.setInt(3, limit);
             List<Message> result = new ArrayList<>();
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {

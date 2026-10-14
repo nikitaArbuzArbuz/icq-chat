@@ -20,6 +20,16 @@ public final class WsEvents {
         }
     }
 
+    /**
+     * Пачка сообщений, пришедших, пока получатель был офлайн, по возрастанию id.
+     * Если hasMore, следующая пачка придёт после того, как клиент подтвердит доставку этой.
+     */
+    public record UndeliveredEvent(String type, List<MessageDto> messages, boolean hasMore) {
+        public UndeliveredEvent(List<Message> messages, boolean hasMore) {
+            this("undelivered", messages.stream().map(MessageDto::from).toList(), hasMore);
+        }
+    }
+
     /** Подтверждение отправителю, что сообщение сохранено. */
     public record AckEvent(String type, String clientId, long id, Instant createdAt) {
         public AckEvent(Message message) {
