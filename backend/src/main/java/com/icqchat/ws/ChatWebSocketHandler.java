@@ -7,6 +7,7 @@ import com.icqchat.common.ApiException;
 import com.icqchat.common.Json;
 import com.icqchat.message.Message;
 import com.icqchat.message.MessageService;
+import com.icqchat.user.DataAccessException;
 import io.javalin.websocket.WsCloseContext;
 import io.javalin.websocket.WsConfig;
 import io.javalin.websocket.WsConnectContext;
@@ -32,6 +33,8 @@ public class ChatWebSocketHandler {
     private static final int CLOSE_UNAUTHORIZED = 4401;
     /** Клиент перестал отвечать на ping. Если он всё-таки жив, то просто переподключится. */
     private static final int CLOSE_HEARTBEAT_TIMEOUT = 4408;
+    /** Стандартный код WebSocket «попробуйте позже»: сервер перегружен, клиент переподключится сам. */
+    private static final int CLOSE_TRY_AGAIN_LATER = 1013;
     /** На скольких пользователей можно подписаться: в списке контактов до 100 человек и открытый диалог, запас вдвое. */
     private static final int MAX_WATCHED_USERS = 200;
 
@@ -71,8 +74,15 @@ public class ChatWebSocketHandler {
         log.info("User {} connected, session {}", id, ctx.sessionId());
 
         // Досылаем всё, что пришло, пока пользователь был офлайн. Клиент подтвердит доставку.
-        for (Message message : messageService.undelivered(id)) {
-            registry.send(ctx, Json.write(new WsEvents.MessageEvent(message)));
+        try {
+            for (Message message : messageService.undelivered(id)) {
+                registry.send(ctx, Json.write(new WsEvents.MessageEvent(message)));
+            }
+        } catch (Exception e) {
+            // Без досылки клиент не узнает о сообщениях, пришедших офлайн, поэтому соединение закрываем:
+            // клиент переподключится с паузой и попробует снова.
+            log.warn("Failed to load undelivered messages for user {}: {}", id, e.getMessage());
+            registry.close(ctx, CLOSE_TRY_AGAIN_LATER, "Try again later");
         }
     }
 
@@ -103,8 +113,13 @@ public class ChatWebSocketHandler {
         } catch (JsonProcessingException e) {
             sendError(ctx, null, "BAD_JSON", "Некорректный JSON");
         } catch (Exception e) {
-            log.error("Failed to handle WebSocket message from user {}", userId, e);
-            sendError(ctx, clientId, "INTERNAL_ERROR", "Внутренняя ошибка сервера");
+            if (DataAccessException.isOverload(e)) {
+                log.warn("Database overloaded while handling message from user {}: {}", userId, e.getMessage());
+                sendError(ctx, clientId, "SERVICE_UNAVAILABLE", "Сервер перегружен, попробуйте ещё раз");
+            } else {
+                log.error("Failed to handle WebSocket message from user {}", userId, e);
+                sendError(ctx, clientId, "INTERNAL_ERROR", "Внутренняя ошибка сервера");
+            }
         }
     }
 

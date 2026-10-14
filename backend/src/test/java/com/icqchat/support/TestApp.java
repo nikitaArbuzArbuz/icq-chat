@@ -28,9 +28,13 @@ public final class TestApp {
 
     private static ChatServer startServer() {
         POSTGRES.start();
-        AppConfig config = new AppConfig(RANDOM_PORT, POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
-                POSTGRES.getPassword(), DB_POOL_SIZE, JWT_SECRET, JWT_TTL_HOURS);
-        return ChatServer.start(config);
+        return ChatServer.start(config(DB_POOL_SIZE));
+    }
+
+    /** Конфигурация с тестовой базой. Тестам пула нужен свой размер пула, поэтому он параметр. */
+    public static AppConfig config(int dbPoolSize) {
+        return new AppConfig(RANDOM_PORT, POSTGRES.getJdbcUrl(), POSTGRES.getUsername(),
+                POSTGRES.getPassword(), dbPoolSize, JWT_SECRET, JWT_TTL_HOURS);
     }
 
     public static URI httpUri(String pathAndQuery) {
