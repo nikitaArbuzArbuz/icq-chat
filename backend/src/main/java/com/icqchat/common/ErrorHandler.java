@@ -3,7 +3,9 @@ package com.icqchat.common;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.icqchat.user.DataAccessException;
 import io.javalin.Javalin;
-import io.javalin.http.BadRequestResponse;
+import io.javalin.http.HttpResponseException;
+import io.javalin.http.HttpStatus;
+import io.javalin.http.NotFoundResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,8 +24,14 @@ public final class ErrorHandler {
         app.exception(ApiException.class, (e, ctx) ->
                 ctx.status(e.status()).json(new ErrorResponse(e.code(), e.getMessage())));
 
-        app.exception(BadRequestResponse.class, (e, ctx) ->
-                ctx.status(400).json(new ErrorResponse("BAD_REQUEST", e.getMessage())));
+        // Ошибки, которые формирует сам Javalin: нет такого адреса, тело запроса больше 1 МБ и т. п.
+        // Без этого он отвечает на них текстом, а клиенту нужен тот же JSON, что и у остальных ошибок.
+        // Код ошибки — название HTTP-статуса: BAD_REQUEST, CONTENT_TOO_LARGE.
+        app.exception(HttpResponseException.class, (e, ctx) -> ctx.status(e.getStatus())
+                .json(new ErrorResponse(HttpStatus.forStatus(e.getStatus()).name(), e.getMessage())));
+
+        app.exception(NotFoundResponse.class, (e, ctx) -> ctx.status(404)
+                .json(new ErrorResponse("NOT_FOUND", "Неизвестный запрос: " + ctx.method() + " " + ctx.path())));
 
         app.exception(JsonProcessingException.class, (e, ctx) ->
                 ctx.status(400).json(new ErrorResponse("BAD_JSON", "Некорректный JSON в теле запроса")));
