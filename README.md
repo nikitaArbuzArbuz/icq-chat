@@ -98,9 +98,10 @@ docker compose down -v
 ### Требования
 
 - JDK 21
-- Gradle 8.x
 - Node.js 20+
 - PostgreSQL 16 (можно поднять только базу: `docker compose up -d postgres`)
+
+Gradle ставить не нужно: в `backend` лежит Gradle Wrapper, при первом запуске `./gradlew` сам скачает нужную версию. На Windows вместо `./gradlew` запускайте `gradlew.bat`.
 
 ### Переменные окружения
 
@@ -122,15 +123,15 @@ docker compose down -v
 
 ```bash
 cd backend
-gradle run
+./gradlew run         # на Windows: gradlew.bat run
 ```
 
 Сборка дистрибутива и запуск:
 
 ```bash
 cd backend
-gradle installDist
-./build/install/backend/bin/backend
+./gradlew installDist                 # на Windows: gradlew.bat installDist
+./build/install/backend/bin/backend   # на Windows: build\install\backend\bin\backend.bat
 ```
 
 Миграции Liquibase применяются автоматически при старте.
@@ -155,7 +156,11 @@ npm run dev
 {"code": "LOGIN_TAKEN", "message": "Логин уже занят"}
 ```
 
+В том же формате приходят и ошибки, которые формирует сам Javalin: на неизвестный адрес — `404 NOT_FOUND`, на тело запроса больше 1 МБ — `413 CONTENT_TOO_LARGE`.
+
 Все эндпоинты, кроме регистрации, входа и `/health`, требуют заголовок `Authorization: Bearer <token>`.
+
+Каждый HTTP-запрос бэкенд пишет в лог одной строкой: метод, путь, статус и время ответа, например `GET /api/users 200 3 ms`. Тела, заголовки и строка запроса в лог не попадают.
 
 Если база перегружена (не дождались свободного соединения из пула за 3 секунды или запрос выполнялся дольше 5 секунд), любой эндпоинт отвечает `503` с кодом `SERVICE_UNAVAILABLE` и заголовком `Retry-After`: запрос можно повторить.
 
@@ -402,6 +407,7 @@ cd backend
 | `FavoritesIntegrationTest` | «Избранное»: сообщения себе сразу прочитаны и не досылаются |
 | `ContactsOrderIntegrationTest` | порядок контактов: «Избранное» первым, дальше диалоги по последнему сообщению |
 | `ContactsSearchIntegrationTest` | поиск контактов по началу логина без учёта регистра, `_` и `%` в строке поиска не работают как шаблон |
+| `HttpErrorsIntegrationTest` | неизвестный адрес отвечает `404 NOT_FOUND` в том же JSON, что и остальные ошибки |
 | `DatabaseIntegrationTest` | таймауты пула: statement_timeout на соединениях, прерывание долгого запроса, быстрый отказ при исчерпании пула |
 | `InvisibleTextIntegrationTest` | сообщения и пароли из одних невидимых символов (неразрывные пробелы, пробелы нулевой ширины) отклоняются |
 | `TextsTest` | модульный тест проверки «визуально пустого» текста, Docker не нужен |

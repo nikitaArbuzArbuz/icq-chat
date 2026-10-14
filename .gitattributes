@@ -1,0 +1,15 @@
+# в репозитории всегда LF, независимо от ОС
+* text=auto eol=lf
+
+# gradlew запускается в Linux, macOS и при сборке в Docker: с CRLF он падает с «/bin/sh^M: bad interpreter»
+gradlew text eol=lf
+
+# виндовые скрипты оставляем с CRLF
+*.bat text eol=crlf
+*.cmd text eol=crlf
+
+# бинарники не трогаем
+*.jar binary
+*.png binary
+*.jpg binary
+*.ico binary
