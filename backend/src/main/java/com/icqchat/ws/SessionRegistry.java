@@ -65,7 +65,9 @@ public class SessionRegistry {
             return;
         }
         for (WsContext ctx : set) {
-            if (!ctx.equals(except)) {
+            // WsContext.equals in Javalin casts the argument without a null check,
+            // so ctx.equals(null) throws NPE. Compare only when there is a session to skip.
+            if (except == null || !ctx.equals(except)) {
                 send(ctx, json);
             }
         }
