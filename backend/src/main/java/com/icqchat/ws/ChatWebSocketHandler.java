@@ -19,25 +19,29 @@ import org.slf4j.LoggerFactory;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
-import java.util.concurrent.TimeUnit;
 
 /**
- * Обработчик WebSocket. Сообщения от клиента: send, delivered, read. Протокол описан в README.
+ * Обработчик WebSocket. Сообщения от клиента: send, delivered, read, pong. Протокол описан в README.
  */
 public class ChatWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
     private static final String USER_ID_ATTRIBUTE = "userId";
+    /** Токен невалидный или истёк. Клиент по этому коду разлогинивается. */
     private static final int CLOSE_UNAUTHORIZED = 4401;
-    private static final long PING_INTERVAL_SECONDS = 20;
+    /** Клиент перестал отвечать на ping. Если он всё-таки жив, то просто переподключится. */
+    private static final int CLOSE_HEARTBEAT_TIMEOUT = 4408;
 
     private final JwtService jwtService;
     private final MessageService messageService;
     private final SessionRegistry registry;
+    private final HeartbeatMonitor heartbeat;
 
-    public ChatWebSocketHandler(JwtService jwtService, MessageService messageService, SessionRegistry registry) {
+    public ChatWebSocketHandler(JwtService jwtService, MessageService messageService, SessionRegistry registry,
+                                HeartbeatMonitor heartbeat) {
         this.jwtService = jwtService;
         this.messageService = messageService;
         this.registry = registry;
+        this.heartbeat = heartbeat;
     }
 
     public void configure(WsConfig ws) {
@@ -48,16 +52,17 @@ public class ChatWebSocketHandler {
     }
 
     private void onConnect(WsConnectContext ctx) {
-        Optional<Long> userId = jwtService.verify(ctx.queryParam("token"));
-        if (userId.isEmpty()) {
+        Optional<JwtService.VerifiedToken> token = jwtService.verifyToken(ctx.queryParam("token"));
+        if (token.isEmpty()) {
             ctx.closeSession(CLOSE_UNAUTHORIZED, "Unauthorized");
             return;
         }
-        long id = userId.get();
+        long id = token.get().userId();
         ctx.attribute(USER_ID_ATTRIBUTE, id);
-        ctx.enableAutomaticPings(PING_INTERVAL_SECONDS, TimeUnit.SECONDS);
 
         boolean cameOnline = registry.add(id, ctx);
+        // Монитор закроет сессию, если клиент перестанет отвечать на ping или истечёт токен.
+        heartbeat.track(ctx, id, token.get().expiresAt());
         log.info("User {} connected, session {}", id, ctx.sessionId());
         if (cameOnline) {
             registry.sendToAllExcept(id, Json.write(new WsEvents.PresenceEvent(id, true)));
@@ -75,6 +80,7 @@ public class ChatWebSocketHandler {
             ctx.closeSession(CLOSE_UNAUTHORIZED, "Unauthorized");
             return;
         }
+        heartbeat.touch(ctx);
         String clientId = null;
         try {
             JsonNode node = Json.MAPPER.readTree(ctx.message());
@@ -84,6 +90,9 @@ public class ChatWebSocketHandler {
                 case "send" -> handleSend(ctx, userId, node);
                 case "delivered" -> handleDelivered(userId, node);
                 case "read" -> handleRead(ctx, userId, node);
+                case "pong" -> {
+                    // Ответ на ping: сессию уже продлил heartbeat.touch выше.
+                }
                 default -> sendError(ctx, clientId, "UNKNOWN_TYPE", "Неизвестный тип сообщения: " + type);
             }
         } catch (ApiException e) {
@@ -157,11 +166,31 @@ public class ChatWebSocketHandler {
         unregister(ctx);
     }
 
+    /**
+     * Вызывается монитором heartbeat из его потока: клиент перестал отвечать на ping
+     * или истёк токен. Сначала убираем сессию из реестра, чтобы остальные сразу увидели
+     * пользователя офлайн, даже если закрытие мёртвого соединения затянется.
+     */
+    public void onDeadSession(WsContext ctx, long userId, HeartbeatMonitor.Reason reason) {
+        log.info("Closing session {} of user {}: {}", ctx.sessionId(), userId, reason);
+        unregister(ctx, userId);
+        switch (reason) {
+            case TOKEN_EXPIRED -> registry.close(ctx, CLOSE_UNAUTHORIZED, "Token expired");
+            case HEARTBEAT_TIMEOUT -> registry.close(ctx, CLOSE_HEARTBEAT_TIMEOUT, "Heartbeat timeout");
+        }
+    }
+
     private void unregister(WsContext ctx) {
         Long userId = ctx.attribute(USER_ID_ATTRIBUTE);
         if (userId == null) {
             return;
         }
+        unregister(ctx, userId);
+    }
+
+    /** Повторный вызов для той же сессии безопасен: второй раз она уже не найдётся в реестре. */
+    private void unregister(WsContext ctx, long userId) {
+        heartbeat.untrack(ctx);
         boolean wentOffline = registry.remove(userId, ctx);
         log.info("User {} disconnected, session {}", userId, ctx.sessionId());
         if (wentOffline) {

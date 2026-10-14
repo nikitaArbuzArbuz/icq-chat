@@ -16,6 +16,7 @@ import com.icqchat.user.UserController;
 import com.icqchat.user.UserRepository;
 import com.icqchat.user.UserService;
 import com.icqchat.ws.ChatWebSocketHandler;
+import com.icqchat.ws.HeartbeatMonitor;
 import com.icqchat.ws.SessionRegistry;
 import io.javalin.Javalin;
 import io.javalin.json.JavalinJackson;
@@ -50,12 +51,15 @@ public class App {
         UserController userController = new UserController(userService);
         MessageController messageController = new MessageController(messageService);
         AuthFilter authFilter = new AuthFilter(jwtService);
-        ChatWebSocketHandler wsHandler = new ChatWebSocketHandler(jwtService, messageService, sessionRegistry);
+        HeartbeatMonitor heartbeatMonitor = new HeartbeatMonitor(sessionRegistry);
+        ChatWebSocketHandler wsHandler = new ChatWebSocketHandler(jwtService, messageService, sessionRegistry,
+                heartbeatMonitor);
 
         Javalin app = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.jsonMapper(new JavalinJackson(Json.MAPPER, false));
-            cfg.jetty.modifyWebSocketServletFactory(factory -> factory.setIdleTimeout(Duration.ofSeconds(60)));
+            cfg.jetty.modifyWebSocketServletFactory(factory ->
+                    factory.setIdleTimeout(HeartbeatMonitor.TRANSPORT_IDLE_TIMEOUT));
         });
 
         ErrorHandler.register(app);
@@ -73,11 +77,13 @@ public class App {
 
         Runtime.getRuntime().addShutdownHook(new Thread(() -> {
             log.info("Shutting down");
+            heartbeatMonitor.close();
             app.stop();
             database.close();
         }));
 
         app.start(config.port());
+        heartbeatMonitor.start(wsHandler::onDeadSession);
         log.info("Chat server started on port {}", config.port());
     }
 }

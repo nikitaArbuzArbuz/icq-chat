@@ -41,6 +41,13 @@ public final class WsEvents {
         }
     }
 
+    /** Heartbeat: сервер проверяет, что клиент на связи. Клиент должен ответить {"type":"pong"}. */
+    public record PingEvent(String type) {
+        public PingEvent() {
+            this("ping");
+        }
+    }
+
     public record PresenceEvent(String type, long userId, boolean online) {
         public PresenceEvent(long userId, boolean online) {
             this("presence", userId, online);

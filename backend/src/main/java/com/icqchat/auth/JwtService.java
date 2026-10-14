@@ -38,16 +38,32 @@ public class JwtService {
                 .sign(algorithm);
     }
 
+    /** Данные из валидного токена: id пользователя и момент, когда токен истекает. */
+    public record VerifiedToken(long userId, Instant expiresAt) {
+    }
+
     /**
      * @return id пользователя из валидного и не истёкшего токена
      */
     public Optional<Long> verify(String token) {
+        return verifyToken(token).map(VerifiedToken::userId);
+    }
+
+    /**
+     * @return id пользователя и срок действия из валидного и не истёкшего токена
+     */
+    public Optional<VerifiedToken> verifyToken(String token) {
         if (token == null || token.isBlank()) {
             return Optional.empty();
         }
         try {
             DecodedJWT jwt = verifier.verify(token);
-            return Optional.of(Long.parseLong(jwt.getSubject()));
+            Instant expiresAt = jwt.getExpiresAtAsInstant();
+            if (expiresAt == null) {
+                // Все наши токены выдаются со сроком действия, бессрочный токен не принимаем.
+                return Optional.empty();
+            }
+            return Optional.of(new VerifiedToken(Long.parseLong(jwt.getSubject()), expiresAt));
         } catch (JWTVerificationException | NumberFormatException e) {
             return Optional.empty();
         }

@@ -82,6 +82,22 @@ public class SessionRegistry {
     }
 
     /**
+     * Закрывает сессию с кодом и причиной. Синхронизировано по сессии, как и {@link #send},
+     * чтобы закрытие не пересеклось с записью из другого потока.
+     */
+    public void close(WsContext ctx, int code, String reason) {
+        synchronized (ctx.session) {
+            try {
+                if (ctx.session.isOpen()) {
+                    ctx.closeSession(code, reason);
+                }
+            } catch (Exception e) {
+                log.warn("Failed to close session {}: {}", ctx.sessionId(), e.getMessage());
+            }
+        }
+    }
+
+    /**
      * Jetty не разрешает писать в одну сессию из нескольких потоков одновременно, поэтому запись синхронизирована по сессии.
      */
     public void send(WsContext ctx, String json) {
