@@ -45,6 +45,7 @@ public class AuthService {
         if (request == null || request.login() == null || request.password() == null) {
             throw ApiException.badRequest("VALIDATION_ERROR", "Укажите логин и пароль");
         }
+        // Пароль длиннее лимита bcrypt verify отклоняет сам, поэтому такой вход получает обычный 401.
         User user = userRepository.findByLogin(request.login())
                 .filter(u -> passwordHasher.verify(request.password(), u.passwordHash()))
                 .orElseThrow(() -> new ApiException(401, "INVALID_CREDENTIALS", "Неверный логин или пароль"));
@@ -64,6 +65,12 @@ public class AuthService {
         }
         if (request.password() == null || request.password().length() < MIN_PASSWORD_LENGTH) {
             throw ApiException.badRequest("VALIDATION_ERROR", "Пароль должен быть не короче 8 символов");
+        }
+        if (PasswordHasher.exceedsMaxLength(request.password())) {
+            throw ApiException.badRequest("VALIDATION_ERROR",
+                    "Пароль слишком длинный: максимум " + PasswordHasher.MAX_PASSWORD_BYTES + " байта, это "
+                            + PasswordHasher.MAX_PASSWORD_BYTES + " латинских символа или "
+                            + PasswordHasher.MAX_PASSWORD_BYTES / 2 + " букв кириллицы");
         }
     }
 }
