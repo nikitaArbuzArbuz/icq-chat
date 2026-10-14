@@ -1,0 +1,283 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: #eef1f5;
+  color: #1f2933;
+}
+
+button {
+  cursor: pointer;
+  border: none;
+  border-radius: 6px;
+  padding: 8px 14px;
+  background: #2f80ed;
+  color: #fff;
+}
+
+button:disabled {
+  opacity: 0.6;
+}
+
+input,
+textarea {
+  font: inherit;
+  border: 1px solid #cbd2d9;
+  border-radius: 6px;
+  padding: 8px 10px;
+}
+
+/* Login */
+.login-page {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 320px;
+  padding: 24px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+.login-form h1 {
+  margin: 0;
+  text-align: center;
+}
+
+.tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.tabs button {
+  flex: 1;
+  background: #e4e7eb;
+  color: #1f2933;
+}
+
+.tabs button.active {
+  background: #2f80ed;
+  color: #fff;
+}
+
+.error,
+.send-error {
+  color: #d64545;
+  font-size: 13px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 12px;
+  color: #7b8794;
+}
+
+/* Main layout */
+.app {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 10px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e4e7eb;
+}
+
+.topbar button {
+  margin-left: auto;
+}
+
+.connection {
+  font-size: 13px;
+}
+
+.connection.ok {
+  color: #27ae60;
+}
+
+.connection.lost {
+  color: #d64545;
+}
+
+.layout {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+
+/* Contacts */
+.contacts {
+  width: 280px;
+  background: #fff;
+  border-right: 1px solid #e4e7eb;
+  display: flex;
+  flex-direction: column;
+}
+
+.contacts .search {
+  margin: 12px;
+}
+
+.contacts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+}
+
+.contacts li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 16px;
+  cursor: pointer;
+}
+
+.contacts li:hover {
+  background: #f5f7fa;
+}
+
+.contacts li.active {
+  background: #e3efff;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+}
+
+.dot.online {
+  background: #27ae60;
+}
+
+.dot.offline {
+  background: #cbd2d9;
+}
+
+.name {
+  flex: 1;
+}
+
+.badge {
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 11px;
+  background: #2f80ed;
+  color: #fff;
+  font-size: 12px;
+  text-align: center;
+}
+
+/* Chat */
+.chat {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.chat.empty {
+  align-items: center;
+  justify-content: center;
+  color: #7b8794;
+}
+
+.chat-header {
+  padding: 14px 16px;
+  background: #fff;
+  border-bottom: 1px solid #e4e7eb;
+  font-weight: 600;
+}
+
+.presence {
+  margin-left: 10px;
+  font-weight: normal;
+  font-size: 13px;
+  color: #7b8794;
+}
+
+.messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.loading {
+  text-align: center;
+  color: #7b8794;
+  font-size: 13px;
+}
+
+.message {
+  max-width: 60%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  background: #fff;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.message.own {
+  align-self: flex-end;
+  background: #dcf0ff;
+}
+
+.message.incoming {
+  align-self: flex-start;
+}
+
+.meta {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-top: 4px;
+  font-size: 11px;
+  color: #7b8794;
+}
+
+.status.sent,
+.status.delivered {
+  color: #9aa5b1;
+}
+
+.status.read {
+  color: #2f80ed;
+}
+
+.status.failed {
+  color: #d64545;
+  font-weight: bold;
+}
+
+.composer {
+  display: flex;
+  gap: 8px;
+  padding: 12px 16px;
+  background: #fff;
+  border-top: 1px solid #e4e7eb;
+}
+
+.composer textarea {
+  flex: 1;
+  resize: none;
+  height: 44px;
+}
