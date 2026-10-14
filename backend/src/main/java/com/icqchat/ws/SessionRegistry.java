@@ -184,8 +184,12 @@ public class SessionRegistry {
         set.forEach(watcher -> send(watcher, json));
     }
 
-    private void replaceWatching(WsContext ctx, SessionState state, Set<Long> next) {
+    private void replaceWatching(WsContext ctx, SessionState state, Set<Long> requested) {
         synchronized (watchLock) {
+            // Сессию могли закрыть в другом потоке (например, монитор heartbeat) между states.get в watch()
+            // и этой блокировкой. remove() убирает состояние из states до того, как чистит подписки под этой же
+            // блокировкой, поэтому если состояния уже нет, новые подписки добавлять нельзя: их некому будет удалить.
+            Set<Long> next = states.get(ctx.sessionId()) == state ? requested : Set.of();
             for (Long id : state.watching) {
                 if (!next.contains(id)) {
                     watchers.computeIfPresent(id, (key, set) -> {
