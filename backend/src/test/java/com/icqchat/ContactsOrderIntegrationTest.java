@@ -45,19 +45,21 @@ class ContactsOrderIntegrationTest {
     @Test
     @DisplayName("пользователи без переписки идут после диалогов, у них lastMessageAt = null")
     void usersWithoutMessagesGoLast() {
+        // У обоих общее начало логина: поиск по нему вернёт только их, сколько бы пользователей ни создали
+        // другие тесты (без поиска в список попадают только первые 100). По логину stranger раньше bob.
+        String prefix = Api.uniqueLogin();
         TestUser alice = Api.newUser();
-        TestUser bob = Api.newUser();
-        TestUser stranger = Api.newUser();
+        TestUser stranger = Api.newUser(prefix + "a");
+        TestUser bob = Api.newUser(prefix + "b");
 
         try (ChatWs aliceTab = ChatWs.connect(alice)) {
             aliceTab.sendMessage(bob, "привет");
         }
 
-        JsonNode contacts = Api.contacts(alice, null);
-        List<Long> ids = ids(contacts);
-        assertTrue(ids.indexOf(bob.id()) < ids.indexOf(stranger.id()), ids::toString);
-        assertTrue(Api.contact(alice, stranger).path("lastMessageAt").isNull());
-        assertTrue(Api.contact(alice, bob).path("lastMessageAt").isTextual());
+        JsonNode contacts = Api.contacts(alice, prefix);
+        assertEquals(List.of(alice.id(), bob.id(), stranger.id()), ids(contacts));
+        assertTrue(contacts.get(1).path("lastMessageAt").isTextual());
+        assertTrue(contacts.get(2).path("lastMessageAt").isNull());
     }
 
     private static List<Long> firstIds(TestUser user, int count) {

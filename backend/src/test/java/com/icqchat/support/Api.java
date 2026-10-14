@@ -5,9 +5,11 @@ import com.fasterxml.jackson.databind.node.NullNode;
 import com.icqchat.common.Json;
 
 import java.io.IOException;
+import java.net.URLEncoder;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -41,7 +43,10 @@ public final class Api {
     }
 
     public static TestUser newUser() {
-        String login = uniqueLogin();
+        return newUser(uniqueLogin());
+    }
+
+    public static TestUser newUser(String login) {
         Response response = register(login, PASSWORD);
         assertEquals(201, response.status(), () -> "регистрация не прошла: " + response.body());
         return new TestUser(response.body().at("/user/id").asLong(), login, response.body().path("token").asText());
@@ -108,7 +113,9 @@ public final class Api {
     }
 
     public static JsonNode contacts(TestUser user, String search) {
-        String path = search == null ? "/api/users" : "/api/users?search=" + search;
+        String path = search == null
+                ? "/api/users"
+                : "/api/users?search=" + URLEncoder.encode(search, StandardCharsets.UTF_8);
         Response response = get(path, user.token());
         assertEquals(200, response.status(), () -> "контакты не загрузились: " + response.body());
         return response.body();
