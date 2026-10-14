@@ -8,6 +8,8 @@
     <logger name="org.eclipse.jetty" level="WARN"/>
     <logger name="liquibase" level="INFO"/>
     <logger name="com.zaxxer.hikari" level="INFO"/>
+    <!-- Лог HTTP-запросов (ChatServer), строка на запрос. Чтобы выключить, поставьте level="WARN". -->
+    <logger name="http" level="INFO"/>
 
     <root level="INFO">
         <appender-ref ref="CONSOLE"/>

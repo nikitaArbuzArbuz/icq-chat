@@ -20,6 +20,8 @@ import com.icqchat.ws.HeartbeatMonitor;
 import com.icqchat.ws.SessionRegistry;
 import io.javalin.Javalin;
 import io.javalin.json.JavalinJackson;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Duration;
 import java.util.Map;
@@ -30,6 +32,9 @@ import java.util.Map;
  * (тестовая база, случайный порт) и остановить его.
  */
 public final class ChatServer implements AutoCloseable {
+    /** Лог HTTP-запросов: отдельный логгер, чтобы его уровень настраивался в logback.xml независимо от остальных. */
+    private static final Logger REQUEST_LOG = LoggerFactory.getLogger("http");
+
     private final Javalin app;
     private final DatabaseManager database;
     private final HeartbeatMonitor heartbeatMonitor;
@@ -78,6 +83,10 @@ public final class ChatServer implements AutoCloseable {
             cfg.jsonMapper(new JavalinJackson(Json.MAPPER, false));
             cfg.jetty.modifyWebSocketServletFactory(factory ->
                     factory.setIdleTimeout(HeartbeatMonitor.TRANSPORT_IDLE_TIMEOUT));
+            // Строка на каждый HTTP-запрос: метод, путь, статус и время ответа. Тела, заголовки и строка
+            // запроса в лог не попадают: в них бывают пароли и токены.
+            cfg.requestLogger.http((ctx, executionTimeMs) -> REQUEST_LOG.info("{} {} {} {} ms",
+                    ctx.method(), ctx.path(), ctx.statusCode(), Math.round(executionTimeMs)));
         });
 
         ErrorHandler.register(app);
