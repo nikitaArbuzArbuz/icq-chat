@@ -7,3 +7,5 @@ databaseChangeLog:
       file: db/changelog/003-dialog-key.sql
   - include:
       file: db/changelog/004-dialogs.sql
+  - include:
+      file: db/changelog/005-login-case-insensitive.sql

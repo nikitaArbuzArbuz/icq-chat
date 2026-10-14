@@ -1,6 +1,7 @@
 package com.icqchat.message;
 
 import com.icqchat.common.ApiException;
+import com.icqchat.common.Texts;
 import com.icqchat.user.UserRepository;
 
 import java.util.ArrayList;
@@ -30,7 +31,7 @@ public class MessageService {
         if (clientId == null || clientId.isBlank() || clientId.length() > MAX_CLIENT_ID_LENGTH) {
             throw ApiException.badRequest("INVALID_CLIENT_ID", "Некорректный clientId");
         }
-        if (text == null || text.isBlank()) {
+        if (Texts.isVisuallyBlank(text)) {
             throw ApiException.badRequest("EMPTY_MESSAGE", "Сообщение не может быть пустым");
         }
         if (text.length() > MAX_TEXT_LENGTH) {

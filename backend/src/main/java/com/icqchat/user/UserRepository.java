@@ -34,8 +34,12 @@ public class UserRepository {
         }
     }
 
+    /**
+     * Ищет пользователя по логину без учёта регистра. Запрос идёт по индексу ux_users_login_lower,
+     * который заодно гарантирует, что логины, отличающиеся только регистром, не появятся.
+     */
     public Optional<User> findByLogin(String login) {
-        return findOne("SELECT id, login, password_hash, created_at FROM users WHERE login = ?", login);
+        return findOne("SELECT id, login, password_hash, created_at FROM users WHERE lower(login) = lower(?)", login);
     }
 
     public Optional<User> findById(long id) {

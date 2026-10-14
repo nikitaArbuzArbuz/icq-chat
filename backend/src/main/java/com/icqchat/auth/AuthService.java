@@ -1,6 +1,7 @@
 package com.icqchat.auth;
 
 import com.icqchat.common.ApiException;
+import com.icqchat.common.Texts;
 import com.icqchat.user.DataAccessException;
 import com.icqchat.user.User;
 import com.icqchat.user.UserDto;
@@ -26,6 +27,7 @@ public class AuthService {
 
     public AuthResponse register(AuthRequest request) {
         validate(request);
+        // Поиск без учёта регистра: Alice и alice считаются одним логином.
         if (userRepository.findByLogin(request.login()).isPresent()) {
             throw ApiException.conflict("LOGIN_TAKEN", "Логин уже занят");
         }
@@ -65,6 +67,10 @@ public class AuthService {
         }
         if (request.password() == null || request.password().length() < MIN_PASSWORD_LENGTH) {
             throw ApiException.badRequest("VALIDATION_ERROR", "Пароль должен быть не короче 8 символов");
+        }
+        if (Texts.isVisuallyBlank(request.password())) {
+            throw ApiException.badRequest("VALIDATION_ERROR",
+                    "Пароль не может состоять только из пробелов и невидимых символов");
         }
         if (PasswordHasher.exceedsMaxLength(request.password())) {
             throw ApiException.badRequest("VALIDATION_ERROR",

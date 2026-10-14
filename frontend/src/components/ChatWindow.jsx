@@ -2,6 +2,10 @@ import { useLayoutEffect, useRef, useState } from 'react';
 import MessageStatus from './MessageStatus';
 
 const MAX_LENGTH = 4000;
+// Текст без единого видимого символа: обычные и неразрывные пробелы, пробелы нулевой ширины
+// и другие форматирующие символы, хангыльские заполнители, пустой символ Брайля, селекторы начертания.
+// Та же проверка есть на сервере (Texts.isVisuallyBlank), здесь она нужна, чтобы не отправлять заведомо пустое.
+const VISUALLY_BLANK = /^[\s\p{Cc}\p{Cf}\u034F\u115F\u1160\u3164\uFFA0\u2800\uFE00-\uFE0F\u{1D159}\u{E0100}-\u{E01EF}]*$/u;
 
 function formatTime(iso) {
   if (!iso) {
@@ -46,7 +50,7 @@ export default function ChatWindow({ me, peer, chat, onSend, onLoadOlder }) {
   const submit = (e) => {
     e.preventDefault();
     const value = text.trim();
-    if (!value) {
+    if (VISUALLY_BLANK.test(value)) {
       return;
     }
     onSend(value);

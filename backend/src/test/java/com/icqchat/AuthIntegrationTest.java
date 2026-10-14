@@ -48,6 +48,31 @@ class AuthIntegrationTest {
         assertError(Api.register(user.login(), "another-password"), 409, "LOGIN_TAKEN");
     }
 
+    @Test
+    @DisplayName("логин, отличающийся только регистром, считается занятым: 409")
+    void loginTakenIgnoringCase() {
+        TestUser user = Api.newUser();
+        assertError(Api.register(user.login().toUpperCase(), PASSWORD), 409, "LOGIN_TAKEN");
+        assertError(Api.register(capitalize(user.login()), PASSWORD), 409, "LOGIN_TAKEN");
+    }
+
+    @Test
+    @DisplayName("вход без учёта регистра, логин отображается так, как его зарегистрировали")
+    void loginIgnoresCase() {
+        String login = "Mixed" + Api.uniqueLogin();
+        Response registered = Api.register(login, PASSWORD);
+        assertEquals(201, registered.status(), registered.body()::toString);
+
+        Response loggedIn = Api.login(login.toLowerCase(), PASSWORD);
+        assertEquals(200, loggedIn.status(), loggedIn.body()::toString);
+        assertEquals(registered.body().at("/user/id").asLong(), loggedIn.body().at("/user/id").asLong());
+        assertEquals(login, loggedIn.body().at("/user/login").asText());
+    }
+
+    private static String capitalize(String login) {
+        return Character.toUpperCase(login.charAt(0)) + login.substring(1);
+    }
+
     @ParameterizedTest(name = "логин \"{0}\": 400")
     @ValueSource(strings = {"ab", "abcdefghijklmnopqrstuvwxyz1234567", "with space", "кириллица", "dash-dash"})
     @DisplayName("невалидный логин: 400 VALIDATION_ERROR")
