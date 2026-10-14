@@ -9,8 +9,8 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Thread-safe registry of open WebSocket sessions grouped by user id.
- * A user is online while at least one of their sessions (browser tabs) is open.
+ * Потокобезопасный реестр открытых WebSocket-сессий, сгруппированных по id пользователя.
+ * Пользователь считается онлайн, пока открыта хотя бы одна его сессия (вкладка браузера).
  */
 public class SessionRegistry {
     private static final Logger log = LoggerFactory.getLogger(SessionRegistry.class);
@@ -18,7 +18,7 @@ public class SessionRegistry {
     private final Map<Long, Set<WsContext>> sessions = new ConcurrentHashMap<>();
 
     /**
-     * @return true if this is the first session of the user, i.e. the user just came online
+     * @return true, если это первая сессия пользователя, то есть он только что появился в сети
      */
     public boolean add(long userId, WsContext ctx) {
         boolean[] cameOnline = {false};
@@ -36,7 +36,7 @@ public class SessionRegistry {
     }
 
     /**
-     * @return true if this was the last session of the user, i.e. the user just went offline
+     * @return true, если это была последняя сессия пользователя, то есть он только что вышел из сети
      */
     public boolean remove(long userId, WsContext ctx) {
         boolean[] wentOffline = {false};
@@ -65,8 +65,8 @@ public class SessionRegistry {
             return;
         }
         for (WsContext ctx : set) {
-            // WsContext.equals in Javalin casts the argument without a null check,
-            // so ctx.equals(null) throws NPE. Compare only when there is a session to skip.
+            // WsContext.equals в Javalin приводит аргумент к WsContext без проверки на null,
+            // поэтому ctx.equals(null) бросает NPE. Сравниваем, только если есть сессия, которую надо пропустить.
             if (except == null || !ctx.equals(except)) {
                 send(ctx, json);
             }
@@ -82,7 +82,7 @@ public class SessionRegistry {
     }
 
     /**
-     * Jetty does not allow concurrent writes to one session, so writes are serialized per session.
+     * Jetty не разрешает писать в одну сессию из нескольких потоков одновременно, поэтому запись синхронизирована по сессии.
      */
     public void send(WsContext ctx, String json) {
         synchronized (ctx.session) {

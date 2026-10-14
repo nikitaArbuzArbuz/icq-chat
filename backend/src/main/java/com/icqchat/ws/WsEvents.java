@@ -7,34 +7,34 @@ import java.time.Instant;
 import java.util.List;
 
 /**
- * Messages sent by the server over WebSocket. Every message has a "type" field.
+ * Сообщения, которые сервер отправляет по WebSocket. У каждого есть поле "type".
  */
 public final class WsEvents {
     private WsEvents() {
     }
 
-    /** A new message: incoming one, or your own message sent from another tab. */
+    /** Новое сообщение: входящее или своё, отправленное из другой вкладки. */
     public record MessageEvent(String type, MessageDto message) {
         public MessageEvent(Message message) {
             this("message", MessageDto.from(message));
         }
     }
 
-    /** Confirmation for the sender that the message is stored. */
+    /** Подтверждение отправителю, что сообщение сохранено. */
     public record AckEvent(String type, String clientId, long id, Instant createdAt) {
         public AckEvent(Message message) {
             this("ack", message.clientId(), message.id(), message.createdAt());
         }
     }
 
-    /** Recipient confirmed that these messages were delivered. */
+    /** Получатель подтвердил доставку этих сообщений. */
     public record DeliveredEvent(String type, long recipientId, List<Long> messageIds) {
         public DeliveredEvent(long recipientId, List<Long> messageIds) {
             this("delivered", recipientId, messageIds);
         }
     }
 
-    /** Reader has read all messages from sender up to the given id. */
+    /** Читатель прочитал все сообщения от отправителя до указанного id. */
     public record ReadEvent(String type, long readerId, long senderId, long upToMessageId) {
         public ReadEvent(long readerId, long senderId, long upToMessageId) {
             this("read", readerId, senderId, upToMessageId);

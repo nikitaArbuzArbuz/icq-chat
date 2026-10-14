@@ -1,8 +1,8 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// In development the Vite dev server proxies API and WebSocket requests to the backend,
-// so the browser talks to a single origin, just like behind nginx in Docker.
+// При разработке dev-сервер Vite проксирует запросы к API и WebSocket на бэкенд,
+// поэтому браузер работает с одним адресом, как и за nginx в Docker.
 export default defineConfig({
   plugins: [react()],
   server: {

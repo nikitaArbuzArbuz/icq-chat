@@ -1,7 +1,7 @@
 package com.icqchat.common;
 
 /**
- * Business error that is converted to a JSON response with a given HTTP status and error code.
+ * Бизнес-ошибка, которая превращается в JSON-ответ с заданным HTTP-статусом и кодом ошибки.
  */
 public class ApiException extends RuntimeException {
     private final int status;

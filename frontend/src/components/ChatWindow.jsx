@@ -26,7 +26,7 @@ export default function ChatWindow({ me, peer, chat, onSend, onLoadOlder }) {
       return;
     }
     if (prevScrollHeight.current != null) {
-      // Older messages were prepended: keep the visible position.
+      // Старые сообщения добавились сверху: сохраняем видимую позицию прокрутки.
       list.scrollTop = list.scrollHeight - prevScrollHeight.current;
       prevScrollHeight.current = null;
     } else if (currentLastKey !== lastMessageKey.current) {

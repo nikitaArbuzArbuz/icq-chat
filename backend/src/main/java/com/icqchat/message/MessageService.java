@@ -24,7 +24,7 @@ public class MessageService {
     }
 
     /**
-     * Saves a message. Repeated sends with the same clientId return the already stored message.
+     * Сохраняет сообщение. Повторная отправка с тем же clientId возвращает уже сохранённое сообщение.
      */
     public SendResult send(long senderId, long recipientId, String clientId, String text) {
         if (clientId == null || clientId.isBlank() || clientId.length() > MAX_CLIENT_ID_LENGTH) {
@@ -41,7 +41,7 @@ public class MessageService {
             throw ApiException.notFound("USER_NOT_FOUND", "Получатель не найден");
         }
 
-        // Messages to yourself ("Избранное") never need delivery or read confirmations.
+        // Сообщениям самому себе («Избранное») не нужны подтверждения доставки и прочтения.
         MessageStatus initialStatus = senderId == recipientId ? MessageStatus.READ : MessageStatus.SENT;
 
         Optional<Message> inserted = messageRepository.insertIfAbsent(senderId, recipientId, clientId, text, initialStatus);
@@ -59,7 +59,7 @@ public class MessageService {
         }
         int pageSize = limit == null || limit <= 0 ? DEFAULT_LIMIT : Math.min(limit, MAX_LIMIT);
 
-        // Load one extra row to know whether older messages exist.
+        // Загружаем на одну строку больше, чтобы понять, есть ли ещё более старые сообщения.
         List<Message> rows = messageRepository.findConversation(userId, peerId, before, pageSize + 1);
         boolean hasMore = rows.size() > pageSize;
         List<Message> page = new ArrayList<>(hasMore ? rows.subList(0, pageSize) : rows);

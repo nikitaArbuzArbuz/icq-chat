@@ -22,7 +22,7 @@ import java.util.Optional;
 import java.util.concurrent.TimeUnit;
 
 /**
- * WebSocket endpoint. Client messages: send, delivered, read. See README for the protocol.
+ * Обработчик WebSocket. Сообщения от клиента: send, delivered, read. Протокол описан в README.
  */
 public class ChatWebSocketHandler {
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
@@ -63,7 +63,7 @@ public class ChatWebSocketHandler {
             registry.sendToAllExcept(id, Json.write(new WsEvents.PresenceEvent(id, true)));
         }
 
-        // Re-send everything that was sent while the user was offline. The client confirms delivery.
+        // Досылаем всё, что пришло, пока пользователь был офлайн. Клиент подтвердит доставку.
         for (Message message : messageService.undelivered(id)) {
             registry.send(ctx, Json.write(new WsEvents.MessageEvent(message)));
         }
@@ -112,7 +112,7 @@ public class ChatWebSocketHandler {
         }
 
         String event = Json.write(new WsEvents.MessageEvent(message));
-        // The message appears in the sender's other tabs.
+        // Сообщение появляется в остальных вкладках отправителя.
         registry.sendToUserExcept(senderId, ctx, event);
         if (recipientId != senderId) {
             registry.sendToUser(recipientId, event);
@@ -143,7 +143,7 @@ public class ChatWebSocketHandler {
         if (updated > 0) {
             String event = Json.write(new WsEvents.ReadEvent(readerId, senderId, lastMessageId));
             registry.sendToUser(senderId, event);
-            // Other tabs of the reader reset the unread counter.
+            // В остальных вкладках читателя сбрасывается счётчик непрочитанных.
             registry.sendToUserExcept(readerId, ctx, event);
         }
     }

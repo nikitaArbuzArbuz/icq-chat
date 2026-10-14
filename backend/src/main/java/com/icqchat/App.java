@@ -26,7 +26,7 @@ import java.time.Duration;
 import java.util.Map;
 
 /**
- * Entry point and composition root: all dependencies are wired here by hand.
+ * Точка входа и сборка приложения: все зависимости создаются и связываются здесь вручную.
  */
 public class App {
     private static final Logger log = LoggerFactory.getLogger(App.class);

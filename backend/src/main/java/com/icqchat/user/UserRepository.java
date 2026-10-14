@@ -54,8 +54,8 @@ public class UserRepository {
     }
 
     /**
-     * Returns users matching the search (plus the current user, always first) with the number of
-     * unread messages each of them sent to the current user.
+     * Возвращает пользователей, подходящих под поиск (плюс текущего пользователя, всегда первым),
+     * и для каждого количество непрочитанных сообщений от него текущему пользователю.
      */
     public List<ContactRow> findContacts(long currentUserId, String search) {
         String sql = """

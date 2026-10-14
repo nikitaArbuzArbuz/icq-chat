@@ -3,7 +3,7 @@ const MIN_RECONNECT_DELAY = 1000;
 const MAX_RECONNECT_DELAY = 30000;
 
 /**
- * WebSocket wrapper with automatic reconnect and exponential backoff.
+ * Обёртка над WebSocket с автоматическим переподключением и растущей задержкой между попытками.
  */
 export class ChatSocket {
   constructor(token, { onEvent, onOpen, onClose, onUnauthorized }) {

@@ -12,7 +12,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 /**
- * Issues and verifies HS256 tokens. The subject of the token is the user id.
+ * Выдаёт и проверяет токены HS256. В subject токена лежит id пользователя.
  */
 public class JwtService {
     private static final String ISSUER = "icq-chat";
@@ -39,7 +39,7 @@ public class JwtService {
     }
 
     /**
-     * @return user id from a valid, non-expired token
+     * @return id пользователя из валидного и не истёкшего токена
      */
     public Optional<Long> verify(String token) {
         if (token == null || token.isBlank()) {

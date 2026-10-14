@@ -1,7 +1,7 @@
 package com.icqchat.user;
 
 /**
- * Entry of the contact list. {@code self} marks the "Избранное" chat with yourself.
+ * Элемент списка контактов. {@code self} отмечает чат «Избранное» с самим собой.
  */
 public record ContactDto(long id, String login, boolean self, boolean online, int unread) {
 }

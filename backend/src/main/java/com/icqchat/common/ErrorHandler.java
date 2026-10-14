@@ -7,7 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * Global exception handling: every error is returned as JSON, stack traces stay in the logs.
+ * Глобальная обработка исключений: любая ошибка возвращается клиенту в виде JSON, стектрейсы остаются только в логах.
  */
 public final class ErrorHandler {
     private static final Logger log = LoggerFactory.getLogger(ErrorHandler.class);

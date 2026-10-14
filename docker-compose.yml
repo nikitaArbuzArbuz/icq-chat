@@ -8,7 +8,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "${DB_PORT}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 5s
@@ -17,13 +17,16 @@ services:
 
   backend:
     build: ./backend
-    env_file: .env
     environment:
-      # внутри docker-сети база доступна по имени сервиса, а не через localhost
       DB_HOST: postgres
       DB_PORT: 5432
-      # nginx во фронте проксирует на backend:8080, поэтому внутри контейнера порт фиксированный
       PORT: 8080
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      DB_POOL_SIZE: ${DB_POOL_SIZE}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_TTL_HOURS: ${JWT_TTL_HOURS}
     depends_on:
       postgres:
         condition: service_healthy
@@ -35,7 +38,7 @@ services:
     depends_on:
       - backend
     ports:
-      - "3000:80"
+      - "${FRONTEND_PORT}:80"
 
 volumes:
   pgdata:

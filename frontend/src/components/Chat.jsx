@@ -4,7 +4,7 @@ import { ChatSocket } from '../chatSocket';
 import ContactList from './ContactList';
 import ChatWindow from './ChatWindow';
 
-// Messages are ordered by server id; messages without id yet (pending) go last.
+// Сообщения сортируются по серверному id; ещё не подтверждённые (без id) идут в конце.
 function compareMessages(a, b) {
   if (a.id == null && b.id == null) return 0;
   if (a.id == null) return 1;
@@ -40,7 +40,7 @@ export default function Chat({ auth, onLogout }) {
   const [connected, setConnected] = useState(false);
 
   const socketRef = useRef(null);
-  // clientId -> { to, text }: messages without a save confirmation, re-sent after reconnect.
+  // clientId -> { to, text }: сообщения без подтверждения сохранения, переотправляются после переподключения.
   const pendingRef = useRef(new Map());
   const chatsRef = useRef(chats);
   const activePeerRef = useRef(activePeerId);
@@ -124,7 +124,7 @@ export default function Chat({ auth, onLogout }) {
         break;
       case 'read':
         if (event.readerId === me) {
-          // Read in another tab of mine.
+          // Прочитано в другой моей вкладке.
           setContacts((prev) => prev.map((c) => (c.id === event.senderId ? { ...c, unread: 0 } : c)));
         } else {
           updateChat(event.readerId, (chat) => ({

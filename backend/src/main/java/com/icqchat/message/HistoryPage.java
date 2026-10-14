@@ -3,7 +3,7 @@ package com.icqchat.message;
 import java.util.List;
 
 /**
- * One page of chat history, messages ordered from oldest to newest.
+ * Одна страница истории переписки, сообщения отсортированы от старых к новым.
  */
 public record HistoryPage(List<Message> messages, boolean hasMore) {
 }

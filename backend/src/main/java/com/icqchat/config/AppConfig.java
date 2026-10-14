@@ -12,11 +12,11 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * Application configuration. Every value comes from the environment, there are no defaults in code:
- * if something is missing, startup fails with the full list of missing variables.
+ * Конфигурация приложения. Все значения берутся из переменных окружения, значений по умолчанию в коде нет:
+ * если чего-то не хватает, приложение не стартует и выводит список всех недостающих переменных.
  * <p>
- * For local runs values are also read from a .env file (current directory or one level up,
- * i.e. the repository root). Process environment variables take precedence over .env.
+ * При локальном запуске значения дополнительно читаются из файла .env (в текущей папке или на уровень выше,
+ * то есть в корне репозитория). Переменные окружения процесса важнее значений из .env.
  */
 public record AppConfig(
         int port,
@@ -91,7 +91,7 @@ public record AppConfig(
         return values;
     }
 
-    /** Collects all configuration errors to report them at once instead of one by one. */
+    /** Собирает все ошибки конфигурации, чтобы показать их разом, а не по одной. */
     private static final class Env {
         private final Map<String, String> dotEnv;
         private final List<String> errors = new ArrayList<>();

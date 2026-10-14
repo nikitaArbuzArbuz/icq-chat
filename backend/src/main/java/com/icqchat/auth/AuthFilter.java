@@ -5,8 +5,8 @@ import io.javalin.http.Context;
 import io.javalin.http.HandlerType;
 
 /**
- * Checks the Bearer token for every /api request except registration and login.
- * The authenticated user id is stored in the request attributes and is the only source of identity.
+ * Проверяет Bearer-токен у каждого запроса к /api, кроме регистрации и входа.
+ * Id пользователя из токена кладётся в атрибуты запроса и дальше берётся только оттуда.
  */
 public class AuthFilter {
     private static final String USER_ID_ATTRIBUTE = "userId";

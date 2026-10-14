@@ -17,7 +17,7 @@ import javax.sql.DataSource;
 import java.sql.Connection;
 
 /**
- * Owns the connection pool and runs Liquibase migrations on startup.
+ * Владеет пулом соединений и при старте применяет миграции Liquibase.
  */
 public class DatabaseManager implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(DatabaseManager.class);

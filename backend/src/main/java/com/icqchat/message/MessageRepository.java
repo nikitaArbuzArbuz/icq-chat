@@ -25,9 +25,9 @@ public class MessageRepository {
     }
 
     /**
-     * Inserts a message unless the sender already sent one with the same clientId.
+     * Сохраняет сообщение, если отправитель ещё не присылал сообщение с таким же clientId.
      *
-     * @return the inserted message, or empty if it is a duplicate
+     * @return сохранённое сообщение или пустой Optional, если это дубль
      */
     public Optional<Message> insertIfAbsent(long senderId, long recipientId, String clientId,
                                             String text, MessageStatus status) {
@@ -63,11 +63,11 @@ public class MessageRepository {
     }
 
     /**
-     * Loads messages between two users, newest first. The dialog key (lower and higher user id)
-     * is the same for both directions, so the query uses ix_messages_dialog and reads only
-     * {@code limit} rows.
+     * Загружает сообщения между двумя пользователями, от новых к старым. Ключ диалога (меньший и больший
+     * id участников) одинаков для обоих направлений, поэтому запрос идёт по индексу ix_messages_dialog
+     * и читает только {@code limit} строк.
      *
-     * @param before only messages with id lower than this one, or null for the latest messages
+     * @param before только сообщения с id меньше этого, или null для самых последних
      */
     public List<Message> findConversation(long userId, long peerId, Long before, int limit) {
         StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + " FROM messages " +
@@ -99,10 +99,10 @@ public class MessageRepository {
     }
 
     /**
-     * Marks messages addressed to the recipient as DELIVERED. Only SENT messages are updated, so
-     * READ never goes back to DELIVERED and repeated confirmations change nothing.
+     * Помечает сообщения получателю как DELIVERED. Обновляются только сообщения в статусе SENT, поэтому
+     * READ никогда не откатывается в DELIVERED, а повторные подтверждения ничего не меняют.
      *
-     * @return ids of actually updated messages grouped by sender id
+     * @return id реально обновлённых сообщений, сгруппированные по id отправителя
      */
     public Map<Long, List<Long>> markDelivered(long recipientId, List<Long> messageIds) {
         String sql = "UPDATE messages SET status = 'DELIVERED', delivered_at = now() " +
@@ -126,9 +126,9 @@ public class MessageRepository {
     }
 
     /**
-     * Marks all incoming messages from the sender up to the given id as READ in a single update.
+     * Одним update помечает как READ все входящие сообщения от отправителя до указанного id включительно.
      *
-     * @return number of messages that changed status
+     * @return количество сообщений, у которых изменился статус
      */
     public int markRead(long recipientId, long senderId, long upToMessageId) {
         String sql = "UPDATE messages SET status = 'READ', read_at = now() " +

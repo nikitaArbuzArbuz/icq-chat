@@ -30,7 +30,7 @@ textarea {
   padding: 8px 10px;
 }
 
-/* Login */
+/* Вход */
 .login-page {
   display: flex;
   align-items: center;
@@ -82,7 +82,7 @@ textarea {
   color: #7b8794;
 }
 
-/* Main layout */
+/* Основная разметка */
 .app {
   display: flex;
   flex-direction: column;
@@ -120,7 +120,7 @@ textarea {
   min-height: 0;
 }
 
-/* Contacts */
+/* Контакты */
 .contacts {
   width: 280px;
   background: #fff;
@@ -184,7 +184,7 @@ textarea {
   text-align: center;
 }
 
-/* Chat */
+/* Чат */
 .chat {
   flex: 1;
   display: flex;

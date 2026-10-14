@@ -7,7 +7,7 @@ import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 
 /**
- * Shared Jackson configuration for REST and WebSocket messages.
+ * Общая настройка Jackson для REST и сообщений WebSocket.
  */
 public final class Json {
     public static final ObjectMapper MAPPER = new ObjectMapper()
