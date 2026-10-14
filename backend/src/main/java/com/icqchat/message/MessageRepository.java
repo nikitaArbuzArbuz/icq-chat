@@ -63,13 +63,15 @@ public class MessageRepository {
     }
 
     /**
-     * Loads messages between two users, newest first.
+     * Loads messages between two users, newest first. The dialog key (lower and higher user id)
+     * is the same for both directions, so the query uses ix_messages_dialog and reads only
+     * {@code limit} rows.
      *
      * @param before only messages with id lower than this one, or null for the latest messages
      */
     public List<Message> findConversation(long userId, long peerId, Long before, int limit) {
         StringBuilder sql = new StringBuilder("SELECT " + COLUMNS + " FROM messages " +
-                "WHERE ((sender_id = ? AND recipient_id = ?) OR (sender_id = ? AND recipient_id = ?))");
+                "WHERE dialog_user_low = ? AND dialog_user_high = ?");
         if (before != null) {
             sql.append(" AND id < ?");
         }
@@ -78,10 +80,8 @@ public class MessageRepository {
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(sql.toString())) {
             int i = 1;
-            ps.setLong(i++, userId);
-            ps.setLong(i++, peerId);
-            ps.setLong(i++, peerId);
-            ps.setLong(i++, userId);
+            ps.setLong(i++, Math.min(userId, peerId));
+            ps.setLong(i++, Math.max(userId, peerId));
             if (before != null) {
                 ps.setLong(i++, before);
             }

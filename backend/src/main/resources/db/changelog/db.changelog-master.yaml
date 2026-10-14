@@ -3,3 +3,5 @@ databaseChangeLog:
       file: db/changelog/001-init.sql
   - include:
       file: db/changelog/002-test-users.sql
+  - include:
+      file: db/changelog/003-dialog-key.sql
