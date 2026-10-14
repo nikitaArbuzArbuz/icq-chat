@@ -22,7 +22,8 @@ public class UserService {
                             row.login(),
                             self,
                             !self && sessionRegistry.isOnline(row.id()),
-                            self ? 0 : row.unread()
+                            self ? 0 : row.unread(),
+                            row.lastMessageAt()
                     );
                 })
                 .toList();

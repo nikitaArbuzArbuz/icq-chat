@@ -25,14 +25,32 @@ public class MessageRepository {
     }
 
     /**
-     * Сохраняет сообщение, если отправитель ещё не присылал сообщение с таким же clientId.
+     * Сохраняет сообщение, если отправитель ещё не присылал сообщение с таким же clientId,
+     * и в том же запросе обновляет последнее сообщение диалога в таблице dialogs.
+     * Один запрос атомарен, поэтому dialogs не расходится с messages. Условие в DO UPDATE
+     * не даёт параллельной вставке откатить последнее сообщение на более старое.
      *
      * @return сохранённое сообщение или пустой Optional, если это дубль
      */
     public Optional<Message> insertIfAbsent(long senderId, long recipientId, String clientId,
                                             String text, MessageStatus status) {
-        String sql = "INSERT INTO messages (sender_id, recipient_id, client_id, text, status) " +
-                "VALUES (?, ?, ?, ?, ?) ON CONFLICT (sender_id, client_id) DO NOTHING RETURNING " + COLUMNS;
+        String sql = """
+                WITH inserted AS (
+                    INSERT INTO messages (sender_id, recipient_id, client_id, text, status)
+                    VALUES (?, ?, ?, ?, ?)
+                    ON CONFLICT (sender_id, client_id) DO NOTHING
+                    RETURNING %1$s
+                ), dialog AS (
+                    INSERT INTO dialogs (user_low, user_high, last_message_id, last_message_at)
+                    SELECT LEAST(sender_id, recipient_id), GREATEST(sender_id, recipient_id), id, created_at
+                    FROM inserted
+                    ON CONFLICT (user_low, user_high) DO UPDATE
+                        SET last_message_id = EXCLUDED.last_message_id,
+                            last_message_at = EXCLUDED.last_message_at
+                        WHERE dialogs.last_message_id < EXCLUDED.last_message_id
+                )
+                SELECT %1$s FROM inserted
+                """.formatted(COLUMNS);
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, senderId);

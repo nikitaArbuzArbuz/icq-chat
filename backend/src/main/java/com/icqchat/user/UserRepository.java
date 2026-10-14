@@ -5,6 +5,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.time.Instant;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -55,11 +56,15 @@ public class UserRepository {
 
     /**
      * Возвращает пользователей, подходящих под поиск (плюс текущего пользователя, всегда первым),
-     * и для каждого количество непрочитанных сообщений от него текущему пользователю.
+     * и для каждого количество непрочитанных сообщений от него текущему пользователю и время
+     * последнего сообщения в диалоге. Сортировка как в мессенджерах: сначала «Избранное», потом
+     * диалоги по последнему сообщению от новых к старым, потом пользователи без переписки по логину.
+     * <p>
+     * Последнее сообщение берётся из таблицы dialogs по первичному ключу, без обращения к messages.
      */
     public List<ContactRow> findContacts(long currentUserId, String search) {
         String sql = """
-                SELECT u.id, u.login, COALESCE(c.cnt, 0) AS unread
+                SELECT u.id, u.login, COALESCE(c.cnt, 0) AS unread, d.last_message_at
                 FROM users u
                 LEFT JOIN (
                     SELECT sender_id, COUNT(*) AS cnt
@@ -67,20 +72,25 @@ public class UserRepository {
                     WHERE recipient_id = ? AND status <> 'READ' AND sender_id <> recipient_id
                     GROUP BY sender_id
                 ) c ON c.sender_id = u.id
+                LEFT JOIN dialogs d ON d.user_low = LEAST(u.id, ?) AND d.user_high = GREATEST(u.id, ?)
                 WHERE u.id = ? OR u.login ILIKE ?
-                ORDER BY (u.id = ?) DESC, u.login
+                ORDER BY (u.id = ?) DESC, d.last_message_id DESC NULLS LAST, u.login
                 LIMIT 100
                 """;
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, currentUserId);
             ps.setLong(2, currentUserId);
-            ps.setString(3, "%" + (search == null ? "" : search.trim()) + "%");
+            ps.setLong(3, currentUserId);
             ps.setLong(4, currentUserId);
+            ps.setString(5, "%" + (search == null ? "" : search.trim()) + "%");
+            ps.setLong(6, currentUserId);
             List<ContactRow> result = new ArrayList<>();
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
-                    result.add(new ContactRow(rs.getLong("id"), rs.getString("login"), rs.getInt("unread")));
+                    OffsetDateTime lastMessageAt = rs.getObject("last_message_at", OffsetDateTime.class);
+                    result.add(new ContactRow(rs.getLong("id"), rs.getString("login"), rs.getInt("unread"),
+                            lastMessageAt == null ? null : lastMessageAt.toInstant()));
                 }
             }
             return result;
@@ -110,6 +120,7 @@ public class UserRepository {
         );
     }
 
-    public record ContactRow(long id, String login, int unread) {
+    /** lastMessageAt равен null, если переписки с пользователем ещё не было. */
+    public record ContactRow(long id, String login, int unread, Instant lastMessageAt) {
     }
 }

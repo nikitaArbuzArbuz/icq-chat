@@ -29,11 +29,38 @@ function mergeAll(list, messages) {
   return messages.reduce((acc, m) => mergeMessage(acc, { ...m, pending: false }), list);
 }
 
+// Порядок контактов как в мессенджерах: «Избранное» первым, дальше диалоги по последнему сообщению
+// от новых к старым, в конце пользователи без переписки в том порядке, в каком их отдал сервер.
+function compareContacts(a, b) {
+  if (a.self !== b.self) return a.self ? -1 : 1;
+  const ta = a.lastMessageAt ? Date.parse(a.lastMessageAt) : null;
+  const tb = b.lastMessageAt ? Date.parse(b.lastMessageAt) : null;
+  if (ta === tb) return 0;
+  if (ta == null) return 1;
+  if (tb == null) return -1;
+  return tb - ta;
+}
+
+// Запоминает время нового сообщения в диалоге и поднимает диалог вверх списка.
+// Более старые события, например досылка недоставленного при подключении, порядок не меняют.
+function touchContact(contacts, peerId, createdAt) {
+  const index = contacts.findIndex((c) => c.id === peerId);
+  if (index < 0 || !createdAt) return contacts;
+  const contact = contacts[index];
+  if (contact.lastMessageAt && Date.parse(contact.lastMessageAt) >= Date.parse(createdAt)) return contacts;
+  const next = [...contacts];
+  next[index] = { ...contact, lastMessageAt: createdAt };
+  return next.sort(compareContacts);
+}
+
 const EMPTY_CHAT = { messages: [], hasMore: false, loaded: false, loading: false };
 
 export default function Chat({ auth, onLogout }) {
   const me = auth.user.id;
   const [contacts, setContacts] = useState([]);
+  // Все пользователи, которые попадали в список контактов. Открытый диалог берёт собеседника отсюда,
+  // поэтому не закрывается, когда поиск убирает его из списка.
+  const [knownUsers, setKnownUsers] = useState({});
   const [search, setSearch] = useState('');
   const [activePeerId, setActivePeerId] = useState(null);
   const [chats, setChats] = useState({});
@@ -45,8 +72,10 @@ export default function Chat({ auth, onLogout }) {
   const chatsRef = useRef(chats);
   const activePeerRef = useRef(activePeerId);
   const searchRef = useRef(search);
+  const contactsRef = useRef(contacts);
 
   chatsRef.current = chats;
+  contactsRef.current = contacts;
   activePeerRef.current = activePeerId;
   searchRef.current = search;
 
@@ -56,7 +85,9 @@ export default function Chat({ auth, onLogout }) {
 
   const loadContacts = useCallback(async (query) => {
     try {
-      setContacts(await api.contacts(auth.token, query));
+      const list = await api.contacts(auth.token, query);
+      setContacts(list);
+      setKnownUsers((prev) => ({ ...prev, ...Object.fromEntries(list.map((c) => [c.id, c])) }));
     } catch (e) {
       if (e.status === 401) onLogout();
     }
@@ -66,6 +97,16 @@ export default function Chat({ auth, onLogout }) {
     const timer = setTimeout(() => loadContacts(search), 300);
     return () => clearTimeout(timer);
   }, [search, loadContacts]);
+
+  // Новое сообщение в диалоге: поднимаем его вверх. Если собеседника нет в списке и поиск не активен,
+  // перезагружаем список, чтобы диалог появился. При активном поиске он появится, когда поиск очистят.
+  const bumpContact = useCallback((peerId, createdAt) => {
+    if (contactsRef.current.some((c) => c.id === peerId)) {
+      setContacts((prev) => touchContact(prev, peerId, createdAt));
+    } else if (!searchRef.current.trim()) {
+      loadContacts('');
+    }
+  }, [loadContacts]);
 
   const sendReadUpTo = useCallback((peerId, lastMessageId) => {
     if (peerId === me || lastMessageId == null) return;
@@ -99,12 +140,14 @@ export default function Chat({ auth, onLogout }) {
             pending: false,
           }),
         }));
+        bumpContact(pending.to, event.createdAt);
         break;
       }
       case 'message': {
         const message = event.message;
         const peerId = message.senderId === me ? message.recipientId : message.senderId;
         updateChat(peerId, (chat) => ({ ...chat, messages: mergeMessage(chat.messages, { ...message, pending: false }) }));
+        bumpContact(peerId, message.createdAt);
         if (message.senderId !== me) {
           socketRef.current?.send({ type: 'delivered', messageIds: [message.id] });
           if (activePeerRef.current === peerId && document.visibilityState === 'visible') {
@@ -136,6 +179,9 @@ export default function Chat({ auth, onLogout }) {
         break;
       case 'presence':
         setContacts((prev) => prev.map((c) => (c.id === event.userId ? { ...c, online: event.online } : c)));
+        setKnownUsers((prev) => (prev[event.userId]
+          ? { ...prev, [event.userId]: { ...prev[event.userId], online: event.online } }
+          : prev));
         break;
       case 'error': {
         const pending = event.clientId ? pendingRef.current.get(event.clientId) : null;
@@ -154,7 +200,7 @@ export default function Chat({ auth, onLogout }) {
       default:
         break;
     }
-  }, [me, updateChat, sendReadUpTo]);
+  }, [me, updateChat, sendReadUpTo, bumpContact]);
 
   const handleEventRef = useRef(handleEvent);
   handleEventRef.current = handleEvent;
@@ -258,7 +304,7 @@ export default function Chat({ auth, onLogout }) {
     socketRef.current?.send({ type: 'send', clientId, to: peerId, text });
   };
 
-  const activePeer = contacts.find((c) => c.id === activePeerId) ?? null;
+  const activePeer = contacts.find((c) => c.id === activePeerId) ?? knownUsers[activePeerId] ?? null;
 
   return (
     <div className="app">

@@ -202,12 +202,12 @@ curl "http://localhost:8080/api/users?search=bo" -H "Authorization: Bearer $TOKE
 
 ```json
 [
-  {"id": 1, "login": "alice", "self": true, "online": false, "unread": 0},
-  {"id": 2, "login": "bob", "self": false, "online": true, "unread": 3}
+  {"id": 1, "login": "alice", "self": true, "online": false, "unread": 0, "lastMessageAt": null},
+  {"id": 2, "login": "bob", "self": false, "online": true, "unread": 3, "lastMessageAt": "2026-10-14T10:00:00Z"}
 ]
 ```
 
-Первым всегда идёт текущий пользователь (`self: true`) — это «Избранное».
+Первым всегда идёт текущий пользователь (`self: true`) — это «Избранное». Дальше диалоги по времени последнего сообщения (`lastMessageAt`), от новых к старым, в конце пользователи, с которыми ещё не было переписки (`lastMessageAt: null`), по логину. Веб-клиент поднимает диалог наверх при каждом новом сообщении, входящем или своём.
 
 ### История переписки
 
@@ -366,6 +366,7 @@ cd backend
 | `OfflineDeliveryIntegrationTest` | досылка недоставленных сообщений при подключении получателя |
 | `OnlineDeliveryIntegrationTest` | доставка онлайн-получателю, синхронизация вкладок, онлайн-статус (регрессия NPE при рассылке) |
 | `FavoritesIntegrationTest` | «Избранное»: сообщения себе сразу прочитаны и не досылаются |
+| `ContactsOrderIntegrationTest` | порядок контактов: «Избранное» первым, дальше диалоги по последнему сообщению |
 
 ## Известные ограничения
 
