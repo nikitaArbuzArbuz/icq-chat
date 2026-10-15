@@ -1,51 +1,31 @@
 import { useLayoutEffect, useRef, useState } from 'react';
-import MessageStatus from './MessageStatus';
+import Avatar from './Avatar';
+import { BackIcon, LogoMark, SendIcon } from './Icons';
+import MessageList from './MessageList';
 
 const MAX_LENGTH = 4000;
 // Текст без единого видимого символа: обычные и неразрывные пробелы, пробелы нулевой ширины
 // и другие форматирующие символы, хангыльские заполнители, пустой символ Брайля, селекторы начертания.
 // Та же проверка есть на сервере (Texts.isVisuallyBlank), здесь она нужна, чтобы не отправлять заведомо пустое.
-const VISUALLY_BLANK = /^[\s\p{Cc}\p{Cf}\u034F\u115F\u1160\u3164\uFFA0\u2800\uFE00-\uFE0F\u{1D159}\u{E0100}-\u{E01EF}]*$/u;
+const VISUALLY_BLANK = /^[\s\p{Cc}\p{Cf}͏ᅟᅠㅤﾠ⠀︀-️\u{1D159}\u{E0100}-\u{E01EF}]*$/u;
+// Поле ввода растёт вместе с текстом до этой высоты, дальше в нём появляется прокрутка.
+const MAX_COMPOSER_HEIGHT = 160;
 
-function formatTime(iso) {
-  if (!iso) {
-    return '';
-  }
-  return new Date(iso).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
-}
-
-export default function ChatWindow({ me, peer, chat, onSend, onLoadOlder }) {
+export default function ChatWindow({ me, peer, chat, onSend, onLoadOlder, onBack }) {
   const [text, setText] = useState('');
-  const listRef = useRef(null);
-  const prevScrollHeight = useRef(null);
-  const lastMessageKey = useRef(null);
-
-  const messages = chat?.messages ?? [];
-  const last = messages[messages.length - 1];
-  const currentLastKey = last ? (last.id ?? last.clientId) : null;
+  const textareaRef = useRef(null);
+  const blank = VISUALLY_BLANK.test(text.trim());
 
   useLayoutEffect(() => {
-    const list = listRef.current;
-    if (!list) {
+    const textarea = textareaRef.current;
+    if (!textarea) {
       return;
     }
-    if (prevScrollHeight.current != null) {
-      // Старые сообщения добавились сверху: сохраняем видимую позицию прокрутки.
-      list.scrollTop = list.scrollHeight - prevScrollHeight.current;
-      prevScrollHeight.current = null;
-    } else if (currentLastKey !== lastMessageKey.current) {
-      list.scrollTop = list.scrollHeight;
-    }
-    lastMessageKey.current = currentLastKey;
-  }, [messages, currentLastKey]);
-
-  const handleScroll = () => {
-    const list = listRef.current;
-    if (list && list.scrollTop < 50 && chat?.hasMore && !chat.loading) {
-      prevScrollHeight.current = list.scrollHeight;
-      onLoadOlder();
-    }
-  };
+    textarea.style.height = 'auto';
+    // scrollHeight не включает рамку, а высота с box-sizing: border-box включает: добавляем её.
+    const border = textarea.offsetHeight - textarea.clientHeight;
+    textarea.style.height = `${Math.min(textarea.scrollHeight + border, MAX_COMPOSER_HEIGHT)}px`;
+  }, [text, peer]);
 
   const submit = (e) => {
     e.preventDefault();
@@ -58,37 +38,42 @@ export default function ChatWindow({ me, peer, chat, onSend, onLoadOlder }) {
   };
 
   if (!peer) {
-    return <section className="chat empty">Выберите собеседника слева</section>;
+    return (
+      <section className="chat chat-empty">
+        <div className="empty-state">
+          <LogoMark className="empty-mark" />
+          <p className="empty-title">Выберите собеседника слева</p>
+          <p className="empty-hint">Enter отправляет сообщение, Shift+Enter переносит строку</p>
+        </div>
+      </section>
+    );
   }
 
+  const online = !peer.self && peer.online;
   return (
     <section className="chat">
-      <header className="chat-header">
-        {peer.self ? 'Избранное' : peer.login}
-        {!peer.self && <span className="presence">{peer.online ? 'в сети' : 'не в сети'}</span>}
+      {/* Новые key при смене собеседника: шапка и лента создаются заново и плавно появляются. */}
+      <header className="chat-header" key={`header-${peer.id}`}>
+        <button type="button" className="icon-button back-button" onClick={onBack} aria-label="К списку контактов">
+          <BackIcon />
+        </button>
+        <Avatar login={peer.login} self={peer.self} presence={online ? 'online' : undefined} />
+        <div className="chat-title">
+          <span className="chat-name">{peer.self ? 'Избранное' : peer.login}</span>
+          <span className={`chat-presence${online ? ' online' : ''}`}>
+            {peer.self ? 'заметки для себя' : online ? 'в сети' : 'не в сети'}
+          </span>
+        </div>
       </header>
-      <div className="messages" ref={listRef} onScroll={handleScroll}>
-        {chat?.loading && <div className="loading">Загрузка…</div>}
-        {messages.map((m) => {
-          const own = m.senderId === me;
-          return (
-            <div key={m.id ?? m.clientId} className={`message ${own ? 'own' : 'incoming'}`}>
-              <div className="text">{m.text}</div>
-              <div className="meta">
-                <span>{formatTime(m.createdAt)}</span>
-                {own && !peer.self && <MessageStatus message={m} />}
-                {own && peer.self && m.pending && <MessageStatus message={m} />}
-              </div>
-              {m.failed && <div className="send-error">Не отправлено: {m.error}</div>}
-            </div>
-          );
-        })}
-      </div>
+      <MessageList key={`messages-${peer.id}`} me={me} peer={peer} chat={chat} onLoadOlder={onLoadOlder} />
       <form className="composer" onSubmit={submit}>
         <textarea
+          ref={textareaRef}
+          rows={1}
           value={text}
           maxLength={MAX_LENGTH}
           placeholder="Сообщение…"
+          aria-label="Сообщение"
           onChange={(e) => setText(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.shiftKey) {
@@ -96,7 +81,9 @@ export default function ChatWindow({ me, peer, chat, onSend, onLoadOlder }) {
             }
           }}
         />
-        <button type="submit">Отправить</button>
+        <button type="submit" className="send-button" disabled={blank} aria-label="Отправить" title="Отправить">
+          <SendIcon />
+        </button>
       </form>
     </section>
   );

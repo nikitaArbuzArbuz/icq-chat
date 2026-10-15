@@ -3,7 +3,27 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#ffffff" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <title>ICQ Chat</title>
+    <script>
+      // Тема ставится до загрузки React и стилей: иначе при тёмной теме страница на мгновение мигнёт светлой.
+      // Выбор пользователя хранится в localStorage (см. src/theme.js), без выбора берётся тема системы.
+      (function () {
+        var theme = null;
+        try {
+          theme = localStorage.getItem('icq-chat-theme');
+        } catch (e) {
+          // localStorage может быть недоступен, например в приватном режиме.
+        }
+        if (theme !== 'light' && theme !== 'dark') {
+          theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+        }
+        document.documentElement.dataset.theme = theme;
+        document.querySelector('meta[name="theme-color"]').content = theme === 'dark' ? '#151b23' : '#ffffff';
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

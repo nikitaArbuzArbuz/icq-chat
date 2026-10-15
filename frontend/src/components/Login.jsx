@@ -1,5 +1,7 @@
 import { useState } from 'react';
 import { api } from '../api';
+import { LogoMark } from './Icons';
+import ThemeToggle from './ThemeToggle';
 
 export default function Login({ onAuth }) {
   const [mode, setMode] = useState('login');
@@ -26,18 +28,25 @@ export default function Login({ onAuth }) {
 
   return (
     <div className="login-page">
-      <form className="login-form" onSubmit={submit}>
+      <div className="login-corner">
+        <ThemeToggle />
+      </div>
+      <form className="login-card" onSubmit={submit}>
+        <LogoMark className="login-mark" />
         <h1>ICQ Chat</h1>
-        <div className="tabs">
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => setMode('login')}>
+        {/* Подложка-«ползунок» переезжает под выбранную кнопку (см. .segmented-thumb в styles.css). */}
+        <div className="segmented" data-mode={mode} role="group" aria-label="Вход или регистрация">
+          <span className="segmented-thumb" aria-hidden="true" />
+          <button type="button" aria-pressed={mode === 'login'} onClick={() => setMode('login')}>
             Вход
           </button>
-          <button type="button" className={mode === 'register' ? 'active' : ''} onClick={() => setMode('register')}>
+          <button type="button" aria-pressed={mode === 'register'} onClick={() => setMode('register')}>
             Регистрация
           </button>
         </div>
         <input
           placeholder="Логин"
+          aria-label="Логин"
           value={login}
           onChange={(e) => setLogin(e.target.value)}
           autoComplete="username"
@@ -45,15 +54,20 @@ export default function Login({ onAuth }) {
         <input
           type="password"
           placeholder="Пароль"
+          aria-label="Пароль"
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
         />
-        {error && <div className="error">{error}</div>}
-        <button type="submit" disabled={loading}>
+        {error && <div className="error" role="alert">{error}</div>}
+        <button type="submit" className="primary" disabled={loading}>
           {mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
         </button>
-        <p className="hint">Тестовые пользователи: alice / password123, bob / password123</p>
+        <p className="hint">
+          Тестовые пользователи: alice и bob
+          <br />
+          Пароль у обоих: password123
+        </p>
       </form>
     </div>
   );

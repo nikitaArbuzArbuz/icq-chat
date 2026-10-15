@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api } from '../api';
 import { ChatSocket } from '../chatSocket';
+import AccountBar from './AccountBar';
 import ContactList from './ContactList';
 import ChatWindow from './ChatWindow';
+import { LogoMark } from './Icons';
 
 // Сообщения сортируются по серверному id; ещё не подтверждённые (без id) идут в конце.
 function compareMessages(a, b) {
@@ -378,6 +380,9 @@ export default function Chat({ auth, onLogout }) {
     socketRef.current?.send({ type: 'send', clientId, to: peerId, text });
   };
 
+  // На узком экране список и диалог не помещаются рядом: кнопка «назад» в шапке диалога возвращает к списку.
+  const closeChat = () => setActivePeerId(null);
+
   const activePeer = contacts.find((c) => c.id === activePeerId) ?? knownUsers[activePeerId] ?? null;
 
   // Подписка на онлайн-статусы: сервер присылает presence только по тем, на кого подписались,
@@ -397,15 +402,12 @@ export default function Chat({ auth, onLogout }) {
   }, [watchKey, connected]);
 
   return (
-    <div className="app">
-      <div className="topbar">
-        <span>Вы вошли как <b>{auth.user.login}</b></span>
-        <span className={`connection ${connected ? 'ok' : 'lost'}`}>
-          {connected ? 'Подключено' : 'Переподключение…'}
-        </span>
-        <button onClick={onLogout}>Выйти</button>
-      </div>
-      <div className="layout">
+    <div className={`app${activePeer ? ' chat-open' : ''}`}>
+      <aside className="sidebar">
+        <header className="sidebar-header">
+          <LogoMark className="brand-mark" />
+          <span className="brand-name">ICQ Chat</span>
+        </header>
         <ContactList
           contacts={contacts}
           activePeerId={activePeerId}
@@ -413,14 +415,16 @@ export default function Chat({ auth, onLogout }) {
           onSearch={setSearch}
           onSelect={openChat}
         />
-        <ChatWindow
-          me={me}
-          peer={activePeer}
-          chat={chats[activePeerId]}
-          onSend={sendMessage}
-          onLoadOlder={loadOlder}
-        />
-      </div>
+        <AccountBar login={auth.user.login} connected={connected} onLogout={onLogout} />
+      </aside>
+      <ChatWindow
+        me={me}
+        peer={activePeer}
+        chat={chats[activePeerId]}
+        onSend={sendMessage}
+        onLoadOlder={loadOlder}
+        onBack={closeChat}
+      />
     </div>
   );
 }
