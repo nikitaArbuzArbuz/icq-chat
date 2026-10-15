@@ -1,7 +1,7 @@
 package com.icqchat;
 
 import com.fasterxml.jackson.databind.JsonNode;
-import com.icqchat.message.MessageService;
+import com.icqchat.service.MessageService;
 import com.icqchat.support.Api;
 import com.icqchat.support.ChatWs;
 import com.icqchat.support.TestUser;

@@ -1,7 +1,7 @@
 package com.icqchat.db;
 
+import com.icqchat.exception.DataAccessException;
 import com.icqchat.support.TestApp;
-import com.icqchat.user.DataAccessException;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
