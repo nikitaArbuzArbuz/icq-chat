@@ -7,6 +7,7 @@ import com.icqchat.common.Json;
 import java.io.IOException;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
+import java.net.http.HttpHeaders;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
@@ -31,9 +32,14 @@ public final class Api {
     private Api() {
     }
 
-    public record Response(int status, JsonNode body) {
+    public record Response(int status, JsonNode body, HttpHeaders headers) {
         public String errorCode() {
             return body.path("code").asText();
+        }
+
+        /** Значение заголовка или null, если его нет. */
+        public String header(String name) {
+            return headers.firstValue(name).orElse(null);
         }
     }
 
@@ -135,7 +141,7 @@ public final class Api {
             HttpResponse<String> response = HTTP.send(request, HttpResponse.BodyHandlers.ofString());
             String body = response.body();
             JsonNode json = body == null || body.isBlank() ? NullNode.getInstance() : Json.MAPPER.readTree(body);
-            return new Response(response.statusCode(), json);
+            return new Response(response.statusCode(), json, response.headers());
         } catch (IOException e) {
             throw new IllegalStateException("запрос " + request.uri() + " не выполнился", e);
         } catch (InterruptedException e) {

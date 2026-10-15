@@ -17,6 +17,7 @@ import java.util.stream.Stream;
 import static com.icqchat.support.Api.PASSWORD;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
 @DisplayName("Регистрация и вход")
@@ -133,6 +134,24 @@ class AuthIntegrationTest {
         assertError(wrongPassword, 401, "INVALID_CREDENTIALS");
         assertError(unknownLogin, 401, "INVALID_CREDENTIALS");
         assertEquals(wrongPassword.body(), unknownLogin.body());
+    }
+
+    @Test
+    @DisplayName("после 10 неудачных попыток вход в аккаунт закрыт: 429 TOO_MANY_ATTEMPTS с Retry-After, даже с верным паролем")
+    void tooManyLoginAttempts() {
+        TestUser user = Api.newUser();
+        for (int i = 0; i < 10; i++) {
+            assertError(Api.login(user.login(), "wrong-password"), 401, "INVALID_CREDENTIALS");
+        }
+
+        Response blocked = Api.login(user.login(), PASSWORD);
+        assertError(blocked, 429, "TOO_MANY_ATTEMPTS");
+        long retryAfterSeconds = Long.parseLong(blocked.header("Retry-After"));
+        assertTrue(retryAfterSeconds > 0 && retryAfterSeconds <= 15 * 60, () -> "Retry-After: " + retryAfterSeconds);
+
+        // Лимит у каждого аккаунта свой: другие пользователи входят как обычно.
+        TestUser other = Api.newUser();
+        assertEquals(200, Api.login(other.login(), PASSWORD).status());
     }
 
     @Test

@@ -20,11 +20,14 @@ public class AuthService {
     private final UserRepository userRepository;
     private final PasswordHasher passwordHasher;
     private final JwtService jwtService;
+    private final LoginAttemptLimiter loginLimiter;
 
-    public AuthService(UserRepository userRepository, PasswordHasher passwordHasher, JwtService jwtService) {
+    public AuthService(UserRepository userRepository, PasswordHasher passwordHasher, JwtService jwtService,
+                       LoginAttemptLimiter loginLimiter) {
         this.userRepository = userRepository;
         this.passwordHasher = passwordHasher;
         this.jwtService = jwtService;
+        this.loginLimiter = loginLimiter;
     }
 
     public AuthResponse register(AuthRequest request) {
@@ -49,11 +52,20 @@ public class AuthService {
         if (request == null || request.login() == null || request.password() == null) {
             throw ApiException.badRequest("VALIDATION_ERROR", "Укажите логин и пароль");
         }
+        // Для несуществующего логина bcrypt не считается, такой ответ дешёвый и под лимит попыток не попадает.
+        User user = userRepository.findByLogin(request.login()).orElseThrow(AuthService::invalidCredentials);
+        // Попытка засчитывается до проверки пароля: заблокированный вход не тратит процессор на bcrypt.
+        loginLimiter.acquire(user.id());
         // Пароль длиннее лимита bcrypt verify отклоняет сам, поэтому такой вход получает обычный 401.
-        User user = userRepository.findByLogin(request.login())
-                .filter(u -> passwordHasher.verify(request.password(), u.passwordHash()))
-                .orElseThrow(() -> new ApiException(401, "INVALID_CREDENTIALS", "Неверный логин или пароль"));
+        if (!passwordHasher.verify(request.password(), user.passwordHash())) {
+            throw invalidCredentials();
+        }
+        loginLimiter.reset(user.id());
         return new AuthResponse(jwtService.issue(user), UserDto.from(user));
+    }
+
+    private static ApiException invalidCredentials() {
+        return new ApiException(401, "INVALID_CREDENTIALS", "Неверный логин или пароль");
     }
 
     public UserDto me(long userId) {

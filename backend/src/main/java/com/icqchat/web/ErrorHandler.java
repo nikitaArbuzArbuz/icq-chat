@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonProcessingException;
 import com.icqchat.exception.ApiException;
 import com.icqchat.exception.DataAccessException;
 import io.javalin.Javalin;
+import io.javalin.http.Context;
 import io.javalin.http.HttpResponseException;
 import io.javalin.http.HttpStatus;
 import io.javalin.http.NotFoundResponse;
@@ -15,15 +16,12 @@ import org.slf4j.LoggerFactory;
  */
 public final class ErrorHandler {
     private static final Logger log = LoggerFactory.getLogger(ErrorHandler.class);
-    /** Через сколько секунд клиенту предлагается повторить запрос при перегрузке. */
-    private static final String RETRY_AFTER_SECONDS = "1";
 
     private ErrorHandler() {
     }
 
     public static void register(Javalin app) {
-        app.exception(ApiException.class, (e, ctx) ->
-                ctx.status(e.status()).json(new ErrorResponse(e.code(), e.getMessage())));
+        app.exception(ApiException.class, (e, ctx) -> respond(ctx, e));
 
         // Ошибки, которые формирует сам Javalin: нет такого адреса, тело запроса больше 1 МБ и т. п.
         // Без этого он отвечает на них текстом, а клиенту нужен тот же JSON, что и у остальных ошибок.
@@ -41,8 +39,7 @@ public final class ErrorHandler {
         app.exception(DataAccessException.class, (e, ctx) -> {
             if (DataAccessException.isOverload(e)) {
                 log.warn("Database overloaded on {} {}: {}", ctx.method(), ctx.path(), e.getCause().getMessage());
-                ctx.status(503).header("Retry-After", RETRY_AFTER_SECONDS)
-                        .json(new ErrorResponse("SERVICE_UNAVAILABLE", "Сервер перегружен, попробуйте ещё раз"));
+                respond(ctx, ApiException.overloaded());
             } else {
                 log.error("Unhandled error on {} {}", ctx.method(), ctx.path(), e);
                 ctx.status(500).json(new ErrorResponse("INTERNAL_ERROR", "Внутренняя ошибка сервера"));
@@ -53,5 +50,15 @@ public final class ErrorHandler {
             log.error("Unhandled error on {} {}", ctx.method(), ctx.path(), e);
             ctx.status(500).json(new ErrorResponse("INTERNAL_ERROR", "Внутренняя ошибка сервера"));
         });
+    }
+
+    /** Статус и JSON из ApiException. Если в ней есть срок повтора, он уходит в заголовке Retry-After. */
+    private static void respond(Context ctx, ApiException e) {
+        if (e.retryAfter() != null) {
+            // Retry-After задаётся в целых секундах. Округляем вверх, чтобы клиент не пришёл раньше срока.
+            long seconds = Math.max(1, (e.retryAfter().toMillis() + 999) / 1000);
+            ctx.header("Retry-After", Long.toString(seconds));
+        }
+        ctx.status(e.status()).json(new ErrorResponse(e.code(), e.getMessage()));
     }
 }

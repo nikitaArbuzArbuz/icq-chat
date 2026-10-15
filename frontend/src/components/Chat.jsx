@@ -60,6 +60,11 @@ const EMPTY_CHAT = { messages: [], hasMore: false, loaded: false, loading: false
 const DELIVERED_FLUSH_DELAY = 100;
 // Столько id сервер принимает в одном delivered (MessageService.MAX_DELIVERED_IDS).
 const MAX_DELIVERED_IDS = 1000;
+// Ответы, после которых список контактов запрашивается снова: сервер перегружен (503) или nginx
+// не достучался до бэкенда (502, 504), например пока тот перезапускается.
+const TRANSIENT_STATUSES = new Set([502, 503, 504]);
+const CONTACTS_RETRY_MIN_DELAY = 1000;
+const CONTACTS_RETRY_MAX_DELAY = 30000;
 
 export default function Chat({ auth, onLogout }) {
   const me = auth.user.id;
@@ -81,6 +86,8 @@ export default function Chat({ auth, onLogout }) {
   const contactsRef = useRef(contacts);
   const contactsRequestRef = useRef(0);
   const contactsReloadRef = useRef(null);
+  const contactsRetryTimerRef = useRef(null);
+  const contactsRetryDelayRef = useRef(CONTACTS_RETRY_MIN_DELAY);
   const deliveredQueueRef = useRef([]);
   const deliveredTimerRef = useRef(null);
 
@@ -97,13 +104,24 @@ export default function Chat({ auth, onLogout }) {
     // Ответы могут прийти не в том порядке, в каком ушли запросы: набрали «a», потом «ab», а ответ на «a»
     // пришёл позже. Применяем только ответ на последний запрос, иначе устаревший список перетрёт свежий.
     const requestId = ++contactsRequestRef.current;
+    // Новый запрос заменяет отложенный повтор предыдущего.
+    clearTimeout(contactsRetryTimerRef.current);
     try {
       const list = await api.contacts(auth.token, query);
       if (requestId !== contactsRequestRef.current) return;
+      contactsRetryDelayRef.current = CONTACTS_RETRY_MIN_DELAY;
       setContacts(list);
       setKnownUsers((prev) => ({ ...prev, ...Object.fromEntries(list.map((c) => [c.id, c])) }));
     } catch (e) {
-      if (e.status === 401) onLogout();
+      if (e.status === 401) {
+        onLogout();
+      } else if (TRANSIENT_STATUSES.has(e.status) && requestId === contactsRequestRef.current) {
+        // Сервер перегружен или перезапускается: повторяем с растущей паузой, но не раньше Retry-After.
+        // Случайная добавка нужна, чтобы тысячи клиентов не пришли за списком в одну и ту же секунду.
+        const delay = Math.max(contactsRetryDelayRef.current, (e.retryAfter ?? 0) * 1000);
+        contactsRetryDelayRef.current = Math.min(delay * 2, CONTACTS_RETRY_MAX_DELAY);
+        contactsRetryTimerRef.current = setTimeout(() => loadContacts(query), delay * (1 + Math.random() / 2));
+      }
     }
   }, [auth.token, onLogout]);
 
@@ -111,6 +129,13 @@ export default function Chat({ auth, onLogout }) {
     const timer = setTimeout(() => loadContacts(search), 300);
     return () => clearTimeout(timer);
   }, [search, loadContacts]);
+
+  // При выходе отменяем отложенный повтор, а ответ на запрос, который ещё в пути, делаем устаревшим:
+  // иначе после 503 он запланировал бы новый повтор уже без пользователя.
+  useEffect(() => () => {
+    contactsRequestRef.current += 1;
+    clearTimeout(contactsRetryTimerRef.current);
+  }, []);
 
   // Новое сообщение в диалоге: поднимаем его вверх. Если собеседника нет в списке и поиск не активен,
   // перезагружаем список, чтобы диалог появился. При активном поиске он появится, когда поиск очистят.

@@ -16,6 +16,11 @@ async function request(path, { method = 'GET', body, token } = {}) {
     const error = new Error(data.message || response.statusText);
     error.status = response.status;
     error.code = data.code;
+    // Через сколько секунд сервер предлагает повторить запрос: приходит с 429 и 503.
+    const retryAfter = Number(response.headers.get('Retry-After'));
+    if (retryAfter > 0) {
+      error.retryAfter = retryAfter;
+    }
     throw error;
   }
   return response.status === 204 ? null : response.json();

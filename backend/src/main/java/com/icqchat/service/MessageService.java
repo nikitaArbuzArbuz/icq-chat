@@ -3,11 +3,13 @@ package com.icqchat.service;
 import com.icqchat.exception.ApiException;
 import com.icqchat.common.Texts;
 import com.icqchat.dto.HistoryPage;
+import com.icqchat.exception.DataAccessException;
 import com.icqchat.model.Message;
 import com.icqchat.model.MessageStatus;
 import com.icqchat.repository.MessageRepository;
 import com.icqchat.repository.UserRepository;
 
+import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -23,6 +25,8 @@ public class MessageService {
     public static final int UNDELIVERED_BATCH_SIZE = 100;
     /** Сколько сообщений можно подтвердить одним delivered: ограничивает размер одного UPDATE. */
     public static final int MAX_DELIVERED_IDS = 1000;
+    /** SQLState нарушения внешнего ключа: сообщение адресовано пользователю, которого нет. */
+    private static final String FOREIGN_KEY_VIOLATION = "23503";
 
     private final MessageRepository messageRepository;
     private final UserRepository userRepository;
@@ -46,14 +50,20 @@ public class MessageService {
             throw ApiException.badRequest("MESSAGE_TOO_LONG",
                     "Сообщение длиннее " + MAX_TEXT_LENGTH + " символов");
         }
-        if (!userRepository.existsById(recipientId)) {
-            throw ApiException.notFound("USER_NOT_FOUND", "Получатель не найден");
-        }
-
         // Сообщениям самому себе («Избранное») не нужны подтверждения доставки и прочтения.
         MessageStatus initialStatus = senderId == recipientId ? MessageStatus.READ : MessageStatus.SENT;
 
-        Optional<Message> inserted = messageRepository.insertIfAbsent(senderId, recipientId, clientId, text, initialStatus);
+        // Получателя отдельным запросом не проверяем: несуществующему пользователю сообщение не даст сохранить
+        // внешний ключ messages.recipient_id, а проверка заранее стоила бы лишнего запроса на каждое сообщение.
+        Optional<Message> inserted;
+        try {
+            inserted = messageRepository.insertIfAbsent(senderId, recipientId, clientId, text, initialStatus);
+        } catch (DataAccessException e) {
+            if (e.getCause() instanceof SQLException sql && FOREIGN_KEY_VIOLATION.equals(sql.getSQLState())) {
+                throw ApiException.notFound("USER_NOT_FOUND", "Получатель не найден");
+            }
+            throw e;
+        }
         if (inserted.isPresent()) {
             return new SendResult(inserted.get(), true);
         }

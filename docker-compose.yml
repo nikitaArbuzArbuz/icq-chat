@@ -1,3 +1,11 @@
+# Логи контейнеров: по умолчанию Docker хранит их без ограничения размера, и со временем они заполнили бы диск.
+# Здесь не больше 5 файлов по 20 МБ на контейнер, старые удаляются.
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
 services:
   postgres:
     image: postgres:16-alpine
@@ -14,6 +22,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 10
+    logging: *logging
 
   backend:
     build: ./backend
@@ -27,11 +36,19 @@ services:
       DB_POOL_SIZE: ${DB_POOL_SIZE}
       JWT_SECRET: ${JWT_SECRET}
       JWT_TTL_HOURS: ${JWT_TTL_HOURS}
+      # Куча JVM — 60 % лимита памяти контейнера (без этого JVM берёт 25 % памяти машины). Остальное нужно
+      # вне кучи: стекам потоков, метаданным классов, скомпилированному коду, буферам Jetty.
+      JAVA_OPTS: "-XX:MaxRAMPercentage=60"
+    mem_limit: 1g
+    # Каждое WebSocket-соединение — открытый файл. Лимит задаётся здесь: изнутри контейнера его не поднять.
+    ulimits:
+      nofile: 65535
     depends_on:
       postgres:
         condition: service_healthy
     ports:
       - "${PORT}:8080"
+    logging: *logging
 
   frontend:
     build: ./frontend
@@ -39,6 +56,10 @@ services:
       - backend
     ports:
       - "${FRONTEND_PORT}:80"
+    # nginx держит по два соединения на каждый WebSocket, см. worker_rlimit_nofile в frontend/nginx.conf.
+    ulimits:
+      nofile: 65535
+    logging: *logging
 
 volumes:
   pgdata:

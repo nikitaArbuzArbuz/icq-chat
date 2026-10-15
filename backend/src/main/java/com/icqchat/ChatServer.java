@@ -10,6 +10,7 @@ import com.icqchat.repository.MessageRepository;
 import com.icqchat.repository.UserRepository;
 import com.icqchat.service.AuthService;
 import com.icqchat.service.JwtService;
+import com.icqchat.service.LoginAttemptLimiter;
 import com.icqchat.service.MessageService;
 import com.icqchat.service.PasswordHasher;
 import com.icqchat.service.UserService;
@@ -66,7 +67,8 @@ public final class ChatServer implements AutoCloseable {
         SessionRegistry sessionRegistry = new SessionRegistry();
 
         JwtService jwtService = new JwtService(config.jwtSecret(), Duration.ofHours(config.jwtTtlHours()));
-        AuthService authService = new AuthService(userRepository, new PasswordHasher(), jwtService);
+        AuthService authService = new AuthService(userRepository, new PasswordHasher(), jwtService,
+                new LoginAttemptLimiter());
         UserService userService = new UserService(userRepository, sessionRegistry);
         MessageService messageService = new MessageService(messageRepository, userRepository);
 
@@ -81,8 +83,14 @@ public final class ChatServer implements AutoCloseable {
         Javalin app = Javalin.create(cfg -> {
             cfg.showJavalinBanner = false;
             cfg.jsonMapper(new JavalinJackson(Json.MAPPER, false));
-            cfg.jetty.modifyWebSocketServletFactory(factory ->
-                    factory.setIdleTimeout(HeartbeatMonitor.TRANSPORT_IDLE_TIMEOUT));
+            cfg.jetty.modifyWebSocketServletFactory(factory -> {
+                factory.setIdleTimeout(HeartbeatMonitor.TRANSPORT_IDLE_TIMEOUT);
+                // Сжатие permessage-deflate Jetty включает по умолчанию, а браузеры всегда его запрашивают.
+                // На каждое соединение оно держит буферы zlib вне Java-кучи, 100–250 КБ: на 10 000 соединений
+                // это 1–2,5 ГБ. Наши сообщения — короткий JSON, сжимать в них почти нечего. Метод возвращает
+                // живой набор расширений сервера, поэтому удаление из него отключает сжатие для всех соединений.
+                factory.getAvailableExtensionNames().remove("permessage-deflate");
+            });
             // Строка на каждый HTTP-запрос: метод, путь, статус и время ответа. Тела, заголовки и строка
             // запроса в лог не попадают: в них бывают пароли и токены.
             cfg.requestLogger.http((ctx, executionTimeMs) -> REQUEST_LOG.info("{} {} {} {} ms",
