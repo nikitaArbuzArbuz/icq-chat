@@ -16,7 +16,7 @@ public class MessageController {
         long userId = CurrentUser.id(ctx);
         long peerId = parseLong(ctx.pathParam("userId"), "userId");
         Long before = ctx.queryParam("before") == null ? null : parseLong(ctx.queryParam("before"), "before");
-        Integer limit = ctx.queryParam("limit") == null ? null : (int) parseLong(ctx.queryParam("limit"), "limit");
+        Long limit = ctx.queryParam("limit") == null ? null : parseLong(ctx.queryParam("limit"), "limit");
         ctx.json(messageService.history(userId, peerId, before, limit));
     }
 

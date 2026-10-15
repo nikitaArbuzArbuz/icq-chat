@@ -10,6 +10,7 @@ import org.junit.jupiter.api.Test;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.stream.LongStream;
 
 import static com.icqchat.support.Api.statusOf;
@@ -95,6 +96,45 @@ class MessageStatusIntegrationTest {
             assertEquals("READ", statusOf(alice, bob.id(), ids.get(1)));
             assertEquals("SENT", statusOf(alice, bob.id(), ids.get(2)));
             assertEquals(1, Api.contact(bob, alice).path("unread").asInt());
+        }
+    }
+
+    @Test
+    @DisplayName("в событии read id последнего сообщения, которое стало прочитанным, а не число от клиента")
+    void readEventCarriesRealLastId() {
+        TestUser alice = Api.newUser();
+        TestUser bob = Api.newUser();
+
+        try (ChatWs aliceTab = ChatWs.connect(alice); ChatWs bobTab = ChatWs.connect(bob)) {
+            aliceTab.sendMessage(bob, "первое");
+            long last = aliceTab.sendMessage(bob, "второе").path("id").asLong();
+
+            bobTab.read(alice.id(), Long.MAX_VALUE);
+            assertEquals(last, aliceTab.await("read").path("upToMessageId").asLong());
+            assertEquals("READ", statusOf(alice, bob.id(), last));
+        }
+    }
+
+    @Test
+    @DisplayName("read, где peerId или lastMessageId не целое число: VALIDATION_ERROR, статусы не меняются")
+    void readRequiresIntegerFields() {
+        TestUser alice = Api.newUser();
+        TestUser bob = Api.newUser();
+
+        try (ChatWs aliceTab = ChatWs.connect(alice); ChatWs bobTab = ChatWs.connect(bob)) {
+            long id = aliceTab.sendMessage(bob, "привет").path("id").asLong();
+
+            List<Map<String, Object>> invalid = List.of(
+                    Map.of("type", "read", "peerId", "abc", "lastMessageId", id),
+                    Map.of("type", "read", "peerId", String.valueOf(alice.id()), "lastMessageId", id),
+                    Map.of("type", "read", "peerId", alice.id(), "lastMessageId", id + 0.5),
+                    Map.of("type", "read", "peerId", alice.id()));
+            for (Map<String, Object> payload : invalid) {
+                bobTab.send(payload);
+                assertEquals("VALIDATION_ERROR", bobTab.await("error").path("code").asText(), payload::toString);
+            }
+            aliceTab.assertNoEvent("read");
+            assertEquals("SENT", statusOf(alice, bob.id(), id));
         }
     }
 

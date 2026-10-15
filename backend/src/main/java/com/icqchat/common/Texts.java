@@ -30,6 +30,14 @@ public final class Texts {
         return text == null || text.codePoints().allMatch(Texts::isInvisible);
     }
 
+    /**
+     * true, если в строке есть нулевой символ U+0000. PostgreSQL не хранит его в текстовых столбцах
+     * и не принимает в параметрах запроса, поэтому такой ввод отклоняется заранее: иначе ошибка базы дала бы 500.
+     */
+    public static boolean containsNul(String text) {
+        return text != null && text.indexOf('\0') >= 0;
+    }
+
     private static boolean isInvisible(int codePoint) {
         int type = Character.getType(codePoint);
         return Character.isWhitespace(codePoint)

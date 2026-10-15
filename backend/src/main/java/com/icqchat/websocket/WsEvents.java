@@ -1,7 +1,7 @@
 package com.icqchat.websocket;
 
+import com.icqchat.dto.MessageDto;
 import com.icqchat.model.Message;
-import com.icqchat.model.MessageStatus;
 
 import java.time.Instant;
 import java.util.List;
@@ -75,14 +75,6 @@ public final class WsEvents {
     public record ErrorEvent(String type, String clientId, String code, String message) {
         public ErrorEvent(String clientId, String code, String message) {
             this("error", clientId, code, message);
-        }
-    }
-
-    public record MessageDto(long id, String clientId, long senderId, long recipientId, String text,
-                             MessageStatus status, Instant createdAt) {
-        public static MessageDto from(Message m) {
-            return new MessageDto(m.id(), m.clientId(), m.senderId(), m.recipientId(), m.text(),
-                    m.status(), m.createdAt());
         }
     }
 }

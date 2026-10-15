@@ -7,6 +7,8 @@ import com.icqchat.support.TestUser;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
+import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
@@ -84,6 +86,14 @@ class SendIdempotencyIntegrationTest {
             assertSendError(tab, bob.id(), "   ", "EMPTY_MESSAGE");
             assertSendError(tab, bob.id(), "x".repeat(4001), "MESSAGE_TOO_LONG");
             assertSendError(tab, missingUserId, "кому-то", "USER_NOT_FOUND");
+
+            // Получатель строкой или дробью: VALIDATION_ERROR, а не сообщение Бобу с id, обрезанным до целого.
+            for (Object to : List.of(String.valueOf(bob.id()), bob.id() + 0.5)) {
+                String clientId = UUID.randomUUID().toString();
+                tab.send(Map.of("type", "send", "clientId", clientId, "to", to, "text", "кому-то"));
+                JsonNode error = tab.await("error", e -> clientId.equals(e.path("clientId").asText()));
+                assertEquals("VALIDATION_ERROR", error.path("code").asText());
+            }
         }
         assertEquals(0, Api.messageIds(Api.history(alice, bob.id(), null, null)).size());
     }

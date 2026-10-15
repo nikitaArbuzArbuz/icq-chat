@@ -92,6 +92,16 @@ class HistoryPaginationIntegrationTest {
     }
 
     @Test
+    @DisplayName("limit больше int тоже обрезается до 100, а не переполняется")
+    void hugeLimitDoesNotOverflow() {
+        // 2^32 + 1: при приведении long к int стало бы 1, и пришла бы страница из одного сообщения.
+        Api.Response response = Api.historyRequest(alice, bob.id(), null, 4_294_967_297L);
+        assertEquals(200, response.status(), response.body()::toString);
+        assertEquals(ALL_IDS.subList(TOTAL - MAX_LIMIT, TOTAL), messageIds(response.body()));
+        assertTrue(response.body().path("hasMore").asBoolean());
+    }
+
+    @Test
     @DisplayName("limit 0 или отрицательный: размер страницы по умолчанию")
     void nonPositiveLimitFallsBackToDefault() {
         assertEquals(DEFAULT_LIMIT, messageIds(history(alice, bob.id(), null, 0)).size());

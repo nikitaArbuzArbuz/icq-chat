@@ -1,6 +1,8 @@
 package com.icqchat.service;
 
+import com.icqchat.common.Texts;
 import com.icqchat.dto.ContactDto;
+import com.icqchat.exception.ApiException;
 import com.icqchat.repository.UserRepository;
 
 import java.util.List;
@@ -15,6 +17,9 @@ public class UserService {
     }
 
     public List<ContactDto> contacts(long currentUserId, String search) {
+        if (Texts.containsNul(search)) {
+            throw ApiException.badRequest("VALIDATION_ERROR", "Строка поиска содержит недопустимый символ U+0000");
+        }
         return userRepository.findContacts(currentUserId, search).stream()
                 .map(row -> {
                     boolean self = row.id() == currentUserId;
@@ -28,9 +33,5 @@ public class UserService {
                     );
                 })
                 .toList();
-    }
-
-    public boolean exists(long userId) {
-        return userRepository.existsById(userId);
     }
 }

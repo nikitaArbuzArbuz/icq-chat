@@ -52,6 +52,10 @@ public class AuthService {
         if (request == null || request.login() == null || request.password() == null) {
             throw ApiException.badRequest("VALIDATION_ERROR", "Укажите логин и пароль");
         }
+        // Логин с U+0000 не пройдёт регистрацию, а PostgreSQL не принимает этот символ в запросе: сразу 401.
+        if (Texts.containsNul(request.login())) {
+            throw invalidCredentials();
+        }
         // Для несуществующего логина bcrypt не считается, такой ответ дешёвый и под лимит попыток не попадает.
         User user = userRepository.findByLogin(request.login()).orElseThrow(AuthService::invalidCredentials);
         // Попытка засчитывается до проверки пароля: заблокированный вход не тратит процессор на bcrypt.

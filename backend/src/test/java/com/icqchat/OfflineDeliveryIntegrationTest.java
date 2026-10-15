@@ -111,4 +111,35 @@ class OfflineDeliveryIntegrationTest {
         assertEquals("DELIVERED", statusOf(alice, bob.id(), sent.get(0)));
         assertEquals("DELIVERED", statusOf(alice, bob.id(), sent.get(total - 1)));
     }
+
+    @Test
+    @DisplayName("подтверждение нового входящего, пришедшего во время досылки, не двигает пачку: следующая уходит только после подтверждения текущей")
+    void liveConfirmationDoesNotAdvanceBatch() {
+        TestUser alice = Api.newUser();
+        TestUser bob = Api.newUser();
+        int batchSize = MessageService.UNDELIVERED_BATCH_SIZE;
+
+        try (ChatWs aliceTab = ChatWs.connect(alice)) {
+            List<Long> offline = new ArrayList<>();
+            for (int i = 0; i < batchSize + 10; i++) {
+                offline.add(aliceTab.sendMessage(bob, "пока Боб офлайн " + i).path("id").asLong());
+            }
+
+            try (ChatWs bobTab = ChatWs.connect(bob)) {
+                List<Long> first = ChatWs.messageIds(bobTab.await("undelivered"));
+                assertEquals(offline.subList(0, batchSize), first);
+
+                // Пачка ещё не подтверждена, а Алиса пишет снова, и Боб подтверждает только новое сообщение.
+                long live = aliceTab.sendMessage(bob, "уже онлайн").path("id").asLong();
+                bobTab.awaitMessage(live);
+                bobTab.delivered(live);
+                bobTab.assertNoEvent("undelivered");
+
+                bobTab.delivered(first.stream().mapToLong(Long::longValue).toArray());
+                JsonNode second = bobTab.await("undelivered");
+                assertEquals(offline.subList(batchSize, batchSize + 10), ChatWs.messageIds(second));
+                assertFalse(second.path("hasMore").asBoolean());
+            }
+        }
+    }
 }

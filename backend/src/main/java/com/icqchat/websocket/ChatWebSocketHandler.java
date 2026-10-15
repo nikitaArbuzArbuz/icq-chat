@@ -21,6 +21,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Optional;
+import java.util.OptionalLong;
 import java.util.Set;
 
 /**
@@ -128,10 +129,7 @@ public class ChatWebSocketHandler {
     }
 
     private void handleSend(WsMessageContext ctx, long senderId, JsonNode node) {
-        if (!node.hasNonNull("to") || !node.get("to").canConvertToLong()) {
-            throw ApiException.badRequest("VALIDATION_ERROR", "Не указан получатель");
-        }
-        long recipientId = node.get("to").asLong();
+        long recipientId = requireLong(node, "to", "Поле to должно быть числом: id получателя");
         String clientId = node.path("clientId").asText(null);
         String text = node.path("text").asText(null);
 
@@ -165,7 +163,7 @@ public class ChatWebSocketHandler {
         }
         Set<Long> ids = new LinkedHashSet<>();
         userIds.forEach(idNode -> {
-            if (idNode.canConvertToLong() && idNode.asLong() != userId) {
+            if (isLong(idNode) && idNode.asLong() != userId) {
                 ids.add(idNode.asLong());
             }
         });
@@ -177,17 +175,29 @@ public class ChatWebSocketHandler {
     private void handleDelivered(WsMessageContext ctx, long recipientId, JsonNode node) {
         List<Long> ids = new ArrayList<>();
         node.path("messageIds").forEach(idNode -> {
-            if (idNode.canConvertToLong()) {
+            if (isLong(idNode)) {
                 ids.add(idNode.asLong());
             }
         });
-        messageService.markDelivered(recipientId, ids).forEach((senderId, deliveredIds) ->
-                registry.sendToUser(senderId, Json.write(new WsEvents.DeliveredEvent(recipientId, deliveredIds))));
-
-        // Клиент подтвердил очередную пачку недоставленного: отправляем следующую.
+        // Следующая пачка недоставленного уходит, только когда клиент подтвердил текущую, то есть её последнее
+        // сообщение. Подтверждения обычных входящих, которые приходят тем временем, пачку не двигают.
         Long cursor = ctx.attribute(UNDELIVERED_CURSOR_ATTRIBUTE);
-        if (cursor != null) {
-            sendUndeliveredBatch(ctx, recipientId, cursor);
+        boolean batchConfirmed = cursor != null && ids.contains(cursor);
+        try {
+            messageService.markDelivered(recipientId, ids).forEach((senderId, deliveredIds) ->
+                    registry.sendToUser(senderId, Json.write(new WsEvents.DeliveredEvent(recipientId, deliveredIds))));
+            if (batchConfirmed) {
+                sendUndeliveredBatch(ctx, recipientId, cursor);
+            }
+        } catch (DataAccessException e) {
+            if (!batchConfirmed) {
+                throw e;
+            }
+            // Подтверждение пачки не обработалось, а второго клиент не пришлёт: досылка встала бы до переподключения.
+            // Закрываем соединение, как и при ошибке досылки на подключении: клиент переподключится с паузой
+            // и получит всё, что осталось недоставленным.
+            log.warn("Failed to continue undelivered messages for user {}: {}", recipientId, e.getMessage());
+            registry.close(ctx, CLOSE_TRY_AGAIN_LATER, "Try again later");
         }
     }
 
@@ -205,21 +215,36 @@ public class ChatWebSocketHandler {
     }
 
     private void handleRead(WsMessageContext ctx, long readerId, JsonNode node) {
-        if (!node.hasNonNull("peerId") || !node.hasNonNull("lastMessageId")) {
-            throw ApiException.badRequest("VALIDATION_ERROR", "Нужны поля peerId и lastMessageId");
-        }
-        long senderId = node.get("peerId").asLong();
-        long lastMessageId = node.get("lastMessageId").asLong();
+        long senderId = requireLong(node, "peerId", "Поле peerId должно быть числом: id собеседника");
+        long lastMessageId = requireLong(node, "lastMessageId",
+                "Поле lastMessageId должно быть числом: id последнего прочитанного сообщения");
         if (senderId == readerId) {
             return;
         }
-        int updated = messageService.markRead(readerId, senderId, lastMessageId);
-        if (updated > 0) {
-            String event = Json.write(new WsEvents.ReadEvent(readerId, senderId, lastMessageId));
+        // В событие уходит id последнего сообщения, которое действительно стало прочитанным, а не число от клиента.
+        OptionalLong readUpTo = messageService.markRead(readerId, senderId, lastMessageId);
+        if (readUpTo.isPresent()) {
+            String event = Json.write(new WsEvents.ReadEvent(readerId, senderId, readUpTo.getAsLong()));
             registry.sendToUser(senderId, event);
             // В остальных вкладках читателя сбрасывается счётчик непрочитанных.
             registry.sendToUserExcept(readerId, ctx, event);
         }
+    }
+
+    /**
+     * Целое число из поля сообщения. Без проверки asLong() на строке "abc" молча вернул бы 0, а на 1.5 — 1,
+     * поэтому всё, что не целое число, получает VALIDATION_ERROR.
+     */
+    private static long requireLong(JsonNode node, String field, String message) {
+        JsonNode value = node.get(field);
+        if (!isLong(value)) {
+            throw ApiException.badRequest("VALIDATION_ERROR", message);
+        }
+        return value.asLong();
+    }
+
+    private static boolean isLong(JsonNode value) {
+        return value != null && value.isIntegralNumber() && value.canConvertToLong();
     }
 
     private void onClose(WsCloseContext ctx) {

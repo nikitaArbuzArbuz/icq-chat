@@ -16,6 +16,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.OptionalLong;
 
 public class MessageRepository {
     private static final String COLUMNS = "id, sender_id, recipient_id, client_id, text, status, created_at";
@@ -146,19 +147,30 @@ public class MessageRepository {
     }
 
     /**
-     * Одним update помечает как READ все входящие сообщения от отправителя до указанного id включительно.
+     * Одним запросом помечает как READ все входящие сообщения от отправителя до указанного id включительно.
      *
-     * @return количество сообщений, у которых изменился статус
+     * @return id последнего сообщения, у которого изменился статус, или пусто, если не изменилось ничего.
+     * Клиент может прислать id больше настоящего, поэтому в уведомление уходит этот id, а не присланный.
      */
-    public int markRead(long recipientId, long senderId, long upToMessageId) {
-        String sql = "UPDATE messages SET status = 'READ', read_at = now() " +
-                "WHERE recipient_id = ? AND sender_id = ? AND id <= ? AND status <> 'READ'";
+    public OptionalLong markRead(long recipientId, long senderId, long upToMessageId) {
+        String sql = """
+                WITH updated AS (
+                    UPDATE messages SET status = 'READ', read_at = now()
+                    WHERE recipient_id = ? AND sender_id = ? AND id <= ? AND status <> 'READ'
+                    RETURNING id
+                )
+                SELECT max(id) FROM updated
+                """;
         try (Connection c = dataSource.getConnection();
              PreparedStatement ps = c.prepareStatement(sql)) {
             ps.setLong(1, recipientId);
             ps.setLong(2, senderId);
             ps.setLong(3, upToMessageId);
-            return ps.executeUpdate();
+            try (ResultSet rs = ps.executeQuery()) {
+                rs.next();
+                long lastReadId = rs.getLong(1);
+                return rs.wasNull() ? OptionalLong.empty() : OptionalLong.of(lastReadId);
+            }
         } catch (SQLException e) {
             throw new DataAccessException("Failed to mark messages as read", e);
         }

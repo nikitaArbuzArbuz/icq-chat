@@ -1,6 +1,7 @@
 package com.icqchat.common;
 
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -11,7 +12,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.params.provider.Arguments.arguments;
 
-@DisplayName("Texts.isVisuallyBlank")
+@DisplayName("Texts: пустой текст и символ U+0000")
 class TextsTest {
 
     static Stream<Arguments> blank() {
@@ -54,5 +55,15 @@ class TextsTest {
     @DisplayName("текст с видимыми символами")
     void acceptsVisibleText(String description, String text) {
         assertFalse(Texts.isVisuallyBlank(text));
+    }
+
+    @Test
+    @DisplayName("containsNul находит U+0000 в любом месте строки")
+    void detectsNul() {
+        assertTrue(Texts.containsNul("\u0000"));
+        assertTrue(Texts.containsNul("при\u0000вет"));
+        assertFalse(Texts.containsNul("привет"));
+        assertFalse(Texts.containsNul(""));
+        assertFalse(Texts.containsNul(null));
     }
 }
